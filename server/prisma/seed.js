@@ -1,8 +1,13 @@
 // Seeds the two standard fee types and the first admin (password printed once).
-// Safe to re-run: existing fee types and an existing admin are left alone.
+// Safe to re-run (the online host runs it on every deploy): existing fee types
+// are left alone, and no admin is created once any admin exists, so a
+// leftover SEED_ADMIN_PASSWORD can never bring back an old sign-in.
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
+import { fixDatabaseUrlEnv } from '../src/lib/dbUrl.js';
+
+fixDatabaseUrlEnv();
 
 const prisma = new PrismaClient();
 
@@ -18,9 +23,13 @@ async function main() {
   console.log('Fee types: Monthly Due ₦5,000, Annual Development Fee ₦40,000');
 
   const email = (process.env.SEED_ADMIN_EMAIL || 'admin@leadwayestate.ng').toLowerCase();
-  const existing = await prisma.user.findUnique({ where: { email } });
+  const existing = await prisma.user.findFirst({ where: { role: 'ADMIN' }, orderBy: { id: 'asc' } });
   if (existing) {
-    console.log(`Admin ${email} already exists (${existing.membershipId}); password unchanged.`);
+    console.log(`An admin already exists (${existing.membershipId}); no new admin created.`);
+    return;
+  }
+  if (await prisma.user.findUnique({ where: { email } })) {
+    console.log(`${email} is already a member, so it was not made the first admin. Set SEED_ADMIN_EMAIL to another address.`);
     return;
   }
   const password = process.env.SEED_ADMIN_PASSWORD || `Lwe-${crypto.randomBytes(6).toString('base64url')}-${crypto.randomInt(10, 99)}`;

@@ -9,6 +9,10 @@ server/   REST API, billing scheduler, Paystack webhook, Prisma schema + migrati
 client/   React single-page app (admin dashboard, resident portal, security gate)
 ```
 
+## Online or on your own computer?
+
+**Want a link that everyone can open?** See [Put it online (free)](#put-it-online-free-your-own-web-address-in-about-15-minutes). **Just trying it out alone?** Run it on your computer (next section).
+
 ## Easiest way: run it on your own computer
 
 You need one thing installed: **Node.js** (the "LTS" version from https://nodejs.org). No database or Docker to install; a database is built in.
@@ -121,32 +125,47 @@ Roles are re-read from the database on every request, so deactivation, role chan
 * Uploads are checked by magic bytes, stored under random names, and served as attachments with `nosniff`.
 * Helmet sets a CSP that allows only Paystack's script and checkout frames.
 
-## Deploying online for free (Render + Neon)
+## Put it online (free): your own web address in about 15 minutes
 
-Nothing here needs a paid plan. The app runs on **Render's free web plan**, the database on **Neon's free PostgreSQL** (Render's own free database is deleted after 30 days, Neon's is not), and uploaded documents are stored in the database, so no disk is needed.
+When this is done, the app has a permanent link such as **https://leadway-estate.onrender.com**. You,
+the other executives and the residents open it on any phone or computer, each with their own sign-in,
+and everyone sees the same records. You need two free accounts. Neither asks for a card.
 
-**1. Create the database on Neon**
-1. Sign up at neon.tech (GitHub sign-in works). Create a project named `leadway-estate`, region **AWS Europe Central (Frankfurt)**.
-2. On the project dashboard click **Connect**, turn **Connection pooling off**, and copy the connection string. It looks like `postgresql://neondb_owner:…@ep-….eu-central-1.aws.neon.tech/neondb?sslmode=require`. If it ends with `&channel_binding=require`, delete that part.
+**Step 1: Make the database (Neon, about 5 minutes)**
+1. Go to **neon.tech** and click **Sign up**. Choosing **Continue with GitHub** is easiest.
+2. Create a project. Name it `leadway-estate` and choose the region **Europe (Frankfurt)**.
+3. On the project page, click **Connect**, then the **Copy** button next to the connection string.
+   It starts with `postgresql://`. Paste it into a note for a moment. You can copy it however Neon
+   shows it, pooled or not; the app tidies it up itself.
 
-**2. Create the app on Render**
-1. Sign up at render.com with your GitHub account and allow it to see `leadway-estate`.
-2. **New → Blueprint**, pick this repo, then **Apply**. Render asks once for:
-   * `DATABASE_URL`: the Neon string from step 1.
-   * `APP_URL`: `https://leadway-estate.onrender.com` (Render shows the exact address; correct it later if it differs).
-   * `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`: the first executive's sign-in. The password is temporary and must be changed at first sign-in.
-   * Paystack, SMTP and Termii keys. These can be left blank and added later under **Environment**.
-3. The first build takes a few minutes. It builds the website, creates the tables and the first admin. Open the address and sign in, then delete `SEED_ADMIN_PASSWORD` from **Environment**.
+**Step 2: Make the website (Render, about 10 minutes)**
+1. Go to **render.com** and sign up with **GitHub**. When GitHub asks, allow Render to see `leadway-estate`.
+2. Click this button:
 
-**3. Keep it awake (recommended, free)**
-A free Render app goes to sleep after 15 minutes without visitors, and the next visitor waits about a minute while it wakes. To avoid that, and so the nightly billing runs on time, create a free job at cron-job.org that opens `https://<your-app>.onrender.com/health` every 10 minutes. One app running all month fits within Render's free hours. Even without this, nothing is lost: billing catches up whenever the app wakes.
+   [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/segunadebanjo/leadway-estate)
 
-**4. Before taking real payments**
-In the Paystack dashboard set the webhook URL to `<APP_URL>/api/payments/webhook`, and do one test payment with your `sk_test_` keys first.
+   (Or in Render: **New** → **Blueprint** → choose `leadway-estate`.)
+3. Render shows three boxes. Fill them in:
+   * **DATABASE_URL**: paste the Neon string from Step 1.
+   * **SEED_ADMIN_EMAIL**: your email. This is your sign-in.
+   * **SEED_ADMIN_PASSWORD**: a temporary password. You choose your own at first sign-in.
+4. Click **Deploy Blueprint** (or **Apply**) and wait about 5 minutes, until it says **Live**.
+5. Click the address at the top of the page (`https://leadway-estate….onrender.com`) and sign in.
 
-Pushing to `main` redeploys automatically. Your own domain can be added under Settings → Custom Domains (then update `APP_URL`).
+That's it. Add your members under **Residents**, then share the address with them.
 
-**Free-plan limits.** Neon's free tier has 0.5 GB of storage. That is plenty for years of estate records, but keep documents to PDFs of normal size (each upload is limited to 10 MB). Neon keeps a short restore history; for safety, download a backup now and then (Neon → Backup & Restore, or `pg_dump`). If the estate outgrows the free tiers, upgrade the same Render service and Neon project. Nothing needs to move.
+**Good to know**
+* **First visit of the day is slow.** A free app sleeps after 15 minutes without visitors, and the next
+  visitor waits about a minute while it wakes. Nothing is lost: billing catches up when it wakes. To keep
+  it awake, create a free job at **cron-job.org** that opens `<your address>/health` every 10 minutes.
+* **When I make changes,** Render updates the online app by itself within a few minutes. There is
+  nothing for you to download. Your records are in Neon and are kept.
+* **Later, when you are ready:** add Paystack keys (online payments), email (SMTP) and SMS (Termii)
+  in Render → your service → **Environment**. Then, in the Paystack dashboard, set the webhook URL to
+  `<your address>/api/payments/webhook` and do one test payment with your `sk_test_` keys first.
+* **Your own domain** (e.g. `app.leadwayestate.ng`): Render → **Settings** → **Custom Domains**.
+* **Free limits:** Neon's free tier has 0.5 GB, which is years of estate records. Download a backup now
+  and then (Neon → **Backup & Restore**).
 
 ## Production deployment (your own server)
 

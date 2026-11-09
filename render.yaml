@@ -1,8 +1,10 @@
-# Free deploy on Render: Dashboard → New → Blueprint → pick this repo.
+# Free deploy on Render: use the "Deploy to Render" button in README.md, or
+# Dashboard → New → Blueprint → pick this repo.
 # Creates one free web service (website + API on one HTTPS address).
-# The database is a free Neon PostgreSQL (neon.tech): paste its connection
-# string as DATABASE_URL when Render asks. Uploaded documents are stored in
-# the database, so no disk is needed. Values marked "sync: false" are asked for once.
+# The database is a free Neon PostgreSQL (neon.tech). Render asks for three
+# things only: the Neon connection string and the first admin's email and
+# temporary password. Paystack, email (SMTP) and SMS (Termii) keys are added
+# later under the service's Environment tab, when you are ready for them.
 services:
   - type: web
     name: leadway-estate
@@ -23,31 +25,15 @@ services:
         value: production
       - key: NODE_VERSION
         value: "22"
-      - key: DATABASE_URL # Neon connection string (direct, not "pooled")
-        sync: false
       - key: JWT_SECRET
         generateValue: true
-      - key: APP_URL # e.g. https://leadway-estate.onrender.com or your own domain
+      - key: DATABASE_URL # Neon connection string, pasted as copied (pooled or not)
         sync: false
-      - key: SEED_ADMIN_EMAIL # the first executive's email
+      - key: SEED_ADMIN_EMAIL # the first executive's email (your sign-in)
         sync: false
-      - key: SEED_ADMIN_PASSWORD # temporary; changed at first sign-in. Delete it afterwards.
-        sync: false
-      - key: PAYSTACK_SECRET_KEY
-        sync: false
-      - key: PAYSTACK_PUBLIC_KEY
-        sync: false
-      - key: SMTP_HOST
+      - key: SEED_ADMIN_PASSWORD # temporary; you choose a new one at first sign-in
         sync: false
       - key: SMTP_PORT
         value: "587"
-      - key: SMTP_USER
-        sync: false
-      - key: SMTP_PASS
-        sync: false
-      - key: SMTP_FROM
-        sync: false
-      - key: TERMII_API_KEY
-        sync: false
       - key: TERMII_SENDER_ID
         value: Leadway

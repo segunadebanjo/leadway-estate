@@ -1,8 +1,10 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { fixDatabaseUrlEnv } from './lib/dbUrl.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const env = process.env;
+fixDatabaseUrlEnv(env);
 const isProd = env.NODE_ENV === 'production';
 const isTest = env.NODE_ENV === 'test';
 
@@ -19,7 +21,8 @@ export const config = {
   isProd,
   isTest,
   port: Number(env.PORT || 4000),
-  appUrl: (env.APP_URL || 'http://localhost:5173').replace(/\/$/, ''),
+  // On Render the public address is known automatically.
+  appUrl: (env.APP_URL || env.RENDER_EXTERNAL_URL || 'http://localhost:5173').replace(/\/$/, ''),
   databaseUrl: required('DATABASE_URL'),
   jwtSecret,
   sessionHours: Number(env.SESSION_HOURS || 12),

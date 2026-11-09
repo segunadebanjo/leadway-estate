@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "node --watch --env-file-if-exists=.env src/server.js",
     "start": "node --env-file-if-exists=.env src/server.js",
-    "db:deploy": "prisma migrate deploy",
+    "db:deploy": "node --env-file-if-exists=.env scripts/migrate.mjs",
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "node --env-file-if-exists=.env prisma/seed.js",
     "db:generate": "prisma generate",

@@ -1,4 +1,7 @@
 import { PrismaClient, Prisma } from '@prisma/client';
+import { fixDatabaseUrlEnv } from './lib/dbUrl.js';
+
+fixDatabaseUrlEnv();
 
 export const prisma = new PrismaClient();
 export { Prisma };
