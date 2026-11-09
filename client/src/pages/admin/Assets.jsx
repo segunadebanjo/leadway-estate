@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api, qs } from '../../api.js';
 import { Badge, Card, ErrorNote, Field, Loading, Modal, Money, PageHeader, SearchField, Table, Tabs, useDebounced, useFetch, useSubmit } from '../../components/ui.jsx';
+import { ImportDialog } from '../../components/ImportDialog.jsx';
 import { date, dateTime, fullName, humanize, koboToInput, toKobo, todayIso } from '../../format.js';
 
 export default function Assets() {
@@ -9,10 +10,34 @@ export default function Assets() {
   const { data, error, reload } = useFetch(`/api/assets${qs({ ...f, q })}`);
   const [open, setOpen] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [importing, setImporting] = useState(false);
   const low = data?.rows.filter((a) => a.lowStock) || [];
   return (
     <>
-      <PageHeader title="Assets" subtitle="Equipment and consumables, stock movements and maintenance" actions={<button className="btn" onClick={() => setEditing({})}>Add item</button>} />
+      <PageHeader title="Assets" subtitle="Equipment and consumables, stock movements and maintenance" actions={<>
+        <button className="btn btn-ghost" onClick={() => setImporting(true)}>Upload assets</button>
+        <button className="btn" onClick={() => setEditing({})}>Add item</button>
+      </>} />
+      {importing && (
+        <ImportDialog
+          title="Upload assets"
+          noun={['item', 'items']}
+          templateUrl="/api/assets/import/template"
+          templateName="assets_upload_template.xlsx"
+          uploadUrl="/api/assets/import"
+          intro="Load your equipment and stock list from Excel. The quantity on each row is recorded as the opening stock."
+          columns={[
+            { key: 'name', label: 'Item', render: (a) => <strong>{a.name}</strong> },
+            { key: 'category', label: 'Category', render: (a) => humanize(a.category) },
+            { key: 'quantity', label: 'Quantity', render: (a) => `${a.quantity} ${a.unit}` },
+            { key: 'minQuantity', label: 'Re-order at', render: (a) => a.minQuantity || '—' },
+            { key: 'location', label: 'Location' },
+            { key: 'purchaseCost', label: 'Cost', align: 'right', render: (a) => (a.purchaseCost ? <Money v={a.purchaseCost} /> : '—') },
+          ]}
+          onClose={() => setImporting(false)}
+          onImported={reload}
+        />
+      )}
       {low.length > 0 && !f.lowStock && !f.q && <div className="alert alert-warn">Low stock: {low.map((a) => `${a.name} (${a.quantity} ${a.unit})`).join(', ')}</div>}
       <Card>
         <div className="filters">

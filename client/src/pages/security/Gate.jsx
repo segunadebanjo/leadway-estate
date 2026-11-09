@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api, qs } from '../../api.js';
-import { Badge, Card, ErrorNote, Field, Loading, PageHeader, SearchField, Table, Tabs, useFetch, useSubmit } from '../../components/ui.jsx';
+import { Badge, Card, ErrorNote, Field, Loading, PageHeader, SearchField, Table, Tabs, useDebounced, useFetch, useSubmit } from '../../components/ui.jsx';
 import { dateTime, fullName } from '../../format.js';
 
 export default function Gate() {
@@ -37,6 +37,7 @@ export default function Gate() {
           </form>
           {pass && <PassCard p={pass} onAct={act} />}
         </Card>
+        <Lookup />
         <Card title="Visitors">
           <Tabs active={scope} onChange={setScope} tabs={[{ key: 'today', label: 'Expected & on site' }, { key: 'onsite', label: 'On site' }, { key: 'all', label: 'Log' }]} />
           <div className="filters"><SearchField value={q} onChange={setQ} placeholder="Name, code or plate" /></div>
@@ -69,5 +70,24 @@ function PassCard({ p, onAct }) {
       {p.state === 'EXPIRED' && <div>This code has expired. Call the resident{p.host.phone ? ` on ${p.host.phone}` : ''}.</div>}
       {p.state === 'NOT_YET_VALID' && <div>This code is not valid yet.</div>}
     </div>
+  );
+}
+
+/** Does this car or person belong to the estate? Registered vehicles, household members and residents. */
+function Lookup() {
+  const [q, setQ] = useState('');
+  const term = useDebounced(q.trim());
+  const { data, error } = useFetch(term.length >= 2 ? `/api/visitors/lookup${qs({ q: term })}` : null);
+  const where = (h) => <><strong>{fullName(h)}</strong> ({h.membershipId}), Plot {h.plotNumber || '—'}{h.street ? `, ${h.street}` : ''}{h.phone ? ` · ${h.phone}` : ''}{!h.isActive && <> <Badge status="INACTIVE" label="No longer a resident" /></>}</>;
+  const found = data && (data.vehicles.length || data.people.length || data.residents.length);
+  return (
+    <Card title="Check a car or person">
+      <Field label="Plate number or name"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. KJA 123 AB, or Ngozi" /></Field>
+      <ErrorNote error={error} />
+      {term.length >= 2 && data && !found && <div className="alert alert-warn">Not registered to any household. Ask for a visitor code or call the resident.</div>}
+      {data?.vehicles.map((v, i) => <div key={`v${i}`} className="alert alert-good"><strong>{v.plateNumber}</strong>{v.description ? ` (${v.description})` : ''} belongs to {where(v.host)}</div>)}
+      {data?.people.map((p, i) => <div key={`p${i}`} className="alert alert-good"><strong>{p.name}</strong> ({p.relationship}{p.phone ? `, ${p.phone}` : ''}) lives with {where(p.host)}</div>)}
+      {data?.residents.map((r) => <div key={`r${r.id}`} className="alert alert-info">Resident: {where(r)}</div>)}
+    </Card>
   );
 }

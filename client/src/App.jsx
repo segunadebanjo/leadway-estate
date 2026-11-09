@@ -26,6 +26,11 @@ import MyRequests from './pages/resident/MyRequests.jsx';
 import MyVisitors from './pages/resident/MyVisitors.jsx';
 import PayCallback from './pages/resident/PayCallback.jsx';
 import Gate from './pages/security/Gate.jsx';
+import Reminders from './pages/admin/Reminders.jsx';
+import Plans from './pages/admin/Plans.jsx';
+import Settings from './pages/admin/Settings.jsx';
+import Community from './pages/Community.jsx';
+import Household from './pages/Household.jsx';
 
 const NAV = {
   ADMIN: [
@@ -36,13 +41,17 @@ const NAV = {
     { to: '/admin/receive-payment', label: 'Receive Payment' },
     { to: '/admin/ledger', label: 'Ledger' },
     { to: '/admin/expenses', label: 'Expenses' },
+    { to: '/admin/reminders', label: 'Reminders' },
+    { to: '/admin/plans', label: 'Payment plans' },
     { to: '/admin/reports', label: 'Reports' },
     { section: 'Estate' },
     { to: '/admin/requests', label: 'Requests', count: 'requests' },
     { to: '/gate', label: 'Gate & Visitors' },
     { to: '/admin/assets', label: 'Assets' },
     { to: '/documents', label: 'Documents' },
+    { to: '/community', label: 'Meetings & polls' },
     { to: '/admin/broadcast', label: 'Broadcast' },
+    { to: '/admin/settings', label: 'Settings' },
     { to: '/admin/audit', label: 'Audit log' },
     { section: 'Me' },
     { to: '/notifications', label: 'Notifications', count: 'notifications' },
@@ -53,6 +62,8 @@ const NAV = {
     { to: '/payments', label: 'Payments & receipts' },
     { to: '/statement', label: 'Statement' },
     { to: '/visitors', label: 'Visitor passes' },
+    { to: '/household', label: 'My household' },
+    { to: '/community', label: 'Polls & meetings' },
     { to: '/requests', label: 'Requests' },
     { to: '/documents', label: 'Documents' },
     { to: '/notifications', label: 'Notifications', count: 'notifications' },
@@ -173,10 +184,15 @@ export default function App() {
             <Route path="/requests" element={<MyRequests />} />
             <Route path="/visitors" element={<MyVisitors />} />
             <Route path="/pay/callback" element={<PayCallback />} />
+            <Route path="/household" element={<Household />} />
           </Route>
 
           <Route element={<RequireAuth roles={['SECURITY', 'ADMIN']} />}>
             <Route path="/gate" element={<Gate />} />
+          </Route>
+
+          <Route element={<RequireAuth roles={['RESIDENT', 'ADMIN']} />}>
+            <Route path="/community" element={<Community />} />
           </Route>
 
           <Route element={<RequireAuth roles={['ADMIN']} />}>
@@ -191,6 +207,9 @@ export default function App() {
             <Route path="/admin/broadcast" element={<Broadcast />} />
             <Route path="/admin/requests" element={<Requests />} />
             <Route path="/admin/audit" element={<AuditLog />} />
+            <Route path="/admin/reminders" element={<Reminders />} />
+            <Route path="/admin/plans" element={<Plans />} />
+            <Route path="/admin/settings" element={<Settings />} />
           </Route>
         </Route>
       </Route>

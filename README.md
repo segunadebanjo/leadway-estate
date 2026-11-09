@@ -49,6 +49,17 @@ On **Residents**, press **Upload members**:
 
 Uploading the same file twice adds nobody twice. **Expenses** has the same **Upload expenses** button for loading past spending. **Download list** on Residents saves the member register for Excel.
 
+## Setting up email
+
+Email (sign-in details, "Forgot password", receipts, reminders) needs an email service. Render's free plan blocks ordinary SMTP, so the app uses **Brevo** (free, 300 emails a day) over HTTPS:
+
+1. Sign up at brevo.com with the address the estate should send from.
+2. In Brevo: your name (top right) → **SMTP & API** → **API Keys** → **Generate a new API key**; copy it.
+3. In Render → leadway-estate → **Environment**, add `BREVO_API_KEY` (the key) and `EMAIL_FROM` = `Leadway Estate <the address you signed up with>`, then **Save, rebuild, and deploy**.
+4. In the app, **Settings → Send a test email**.
+
+On your own server any SMTP account works instead (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`).
+
 ## Getting updates (after changes are made)
 
 Your data lives in the `local-data` folder, so updating the program never touches it.
@@ -104,6 +115,13 @@ Roles are re-read from the database on every request, so deactivation, role chan
 | **Broadcast** | In-app notice + optional email + SMS to everyone, owners, tenants or chosen residents; delivery counts |
 | **Requests** *(new)* | Residents report faults / complaints by category; executives are notified, update status with a note; the resident is notified (and emailed when resolved) |
 | **Visitor gate passes** *(new)* | Resident issues a 6-digit one-time code (optionally texted to the visitor) valid for a set window; security verifies, checks in (once only) and out; the resident is notified on arrival |
+| **Bank statement upload** | *Receive Payment → Upload bank statement*: the estate account statement from internet banking (Excel/CSV) as it is. Money-in lines are matched to members by a Membership ID column, "LWE 12" in the narration, phone number or name, then received exactly like a manual payment. A bank reference is used once, so re-uploading never double-counts |
+| **Reminders** | List of everyone with overdue bills; send a reminder now by app notice, email and SMS; or switch on **weekly automatic reminders** (day, minimum days overdue, minimum amount). Nobody is reminded more than once a week; members keeping up with a payment plan are skipped |
+| **Payment plans** | Spread a member's debt over 2–24 monthly instalments. The plan is measured against cash paid since it was agreed (bills still settle oldest first), shows each instalment as paid / part paid / overdue, completes itself when paid, and appears on the member's home page |
+| **Meetings & polls** | Polls for all residents, owners or tenants: one vote per member, results shown when voting closes. Meetings with agenda and notice to residents, and an attendance register (with proxies), turnout and CSV download |
+| **Household & vehicles** | Residents list the people who live with them and their cars (*My household*); executives see and edit them on the member's page. The gate's **Check a car or person** finds who a plate or name belongs to |
+| **Settings** | Shows whether email, SMS and Paystack are set up, step-by-step email set-up with Brevo, and *Send a test email* |
+| **Uploads** | Members, expenses, assets and bank statements from Excel/CSV, each with a template, a check-first preview and duplicate protection |
 | **Audit log** *(new)* | Every executive action on members, money and records, with before/after values |
 | **Resident portal** | Outstanding / overdue / paid / credit, itemised bills, **Pay now** (full or part, ≥ ₦100), receipts, statement, visitor passes, requests, documents, notifications, own phone number |
 | **Accounts** | **Self-service password reset** by emailed one-hour single-use link *(new)*; change password signs out other devices |

@@ -292,3 +292,12 @@ textarea { min-height: 110px; resize: vertical; }
 .preview-scroll .table-wrap { margin: 0; }
 .filters .field { margin-bottom: 0; }
 .section-title { font-size: 1rem; margin: 14px 0 8px; }
+
+/* Polls */
+.poll-option { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+.poll-results { display: grid; gap: 10px; }
+.poll-row { display: grid; gap: 4px; }
+.poll-label { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+.poll-bar-wrap { display: flex; align-items: center; gap: 10px; }
+.poll-bar { height: 12px; min-width: 2px; background: var(--brand); border-radius: 6px; flex: 0 0 auto; max-width: 75%; }
+.steps ul { margin: 4px 0; padding-left: 18px; }

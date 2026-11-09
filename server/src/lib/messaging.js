@@ -18,12 +18,57 @@ function getTransporter() {
   return transporter;
 }
 
+/** Which email service is set up: 'brevo', 'smtp' or null. */
+export function emailProvider() {
+  if (config.brevo.apiKey) return 'brevo';
+  if (config.smtp.host) return 'smtp';
+  return null;
+}
+
+/** "Leadway Estate <a@b.ng>" → { name, email } */
+export function parseSender(from) {
+  const m = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(from || '');
+  return m ? { name: m[1].trim() || undefined, email: m[2].trim() } : { email: String(from || '').trim() };
+}
+
+async function sendViaBrevo({ to, subject, text, html }) {
+  const res = await fetch(`${config.brevo.baseUrl}/v3/smtp/email`, {
+    method: 'POST',
+    headers: { 'api-key': config.brevo.apiKey, 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      sender: parseSender(config.emailFrom),
+      to: [{ email: to }],
+      subject,
+      textContent: text,
+      ...(html ? { htmlContent: html } : {}),
+    }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Brevo HTTP ${res.status} ${body.slice(0, 200)}`);
+  }
+}
+
+export let lastEmailError = null;
+
 /** Returns true when the message was accepted for delivery. Never throws. */
 export async function sendEmail({ to, subject, text, html }) {
   if (!to) return false;
   if (config.isTest) {
     outbox.email.push({ to, subject, text, html });
     return true;
+  }
+  if (config.brevo.apiKey) {
+    try {
+      await sendViaBrevo({ to, subject, text, html });
+      lastEmailError = null;
+      return true;
+    } catch (err) {
+      lastEmailError = err.message;
+      console.error(`[email] ${to}: ${err.message}`);
+      return false;
+    }
   }
   const t = getTransporter();
   if (!t) {
@@ -32,8 +77,10 @@ export async function sendEmail({ to, subject, text, html }) {
   }
   try {
     await t.sendMail({ from: config.smtp.from, to, subject, text, html });
+    lastEmailError = null;
     return true;
   } catch (err) {
+    lastEmailError = err.message;
     console.error(`[email] ${to}: ${err.message}`);
     return false;
   }

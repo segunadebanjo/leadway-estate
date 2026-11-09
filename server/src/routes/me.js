@@ -5,6 +5,7 @@ import { parse, z, id, text, isoDate } from '../lib/validate.js';
 import { requireAuth, requireResident } from '../middleware/auth.js';
 import { memberBalance, paymentInclude } from '../services/ledger.js';
 import { memberStatement } from './reports.js';
+import { planInclude, withProgress } from '../services/plans.js';
 
 // The signed-in member's own data. Every query is keyed on req.user.id.
 export const router = Router();
@@ -16,7 +17,8 @@ router.get('/summary', requireResident, async (req, res) => {
     prisma.notification.count({ where: { userId: req.user.id, readAt: null } }),
     prisma.serviceRequest.count({ where: { userId: req.user.id, status: { in: ['OPEN', 'IN_PROGRESS'] } } }),
   ]);
-  res.json({ balance, recentPayments, unreadNotifications: unread, openRequests });
+  const plan = await prisma.paymentPlan.findFirst({ where: { userId: req.user.id, status: 'ACTIVE' }, include: planInclude });
+  res.json({ balance, recentPayments, unreadNotifications: unread, openRequests, plan: plan ? await withProgress(plan) : null });
 });
 
 router.get('/invoices', requireResident, async (req, res) => {

@@ -19,6 +19,10 @@ import { router as documentRoutes } from './routes/documents.js';
 import { router as broadcastRoutes } from './routes/broadcasts.js';
 import { router as assetRoutes } from './routes/assets.js';
 import { router as reportRoutes } from './routes/reports.js';
+import { router as reminderRoutes } from './routes/reminders.js';
+import { router as planRoutes } from './routes/plans.js';
+import { router as householdRoutes } from './routes/household.js';
+import { router as communityRoutes } from './routes/community.js';
 
 export function createApp() {
   const app = express();
@@ -68,7 +72,11 @@ export function createApp() {
   api.use('/documents', documentRoutes);
   api.use('/residents', requireAdmin, residentRoutes);
   api.use('/ledger', requireAdmin, ledgerRoutes);
+  api.use('/admin', requireAdmin, reminderRoutes);
   api.use('/admin', requireAdmin, adminRoutes);
+  api.use('/plans', requireAdmin, planRoutes);
+  api.use('/household', householdRoutes);
+  api.use('/community', communityRoutes);
   api.use('/broadcasts', requireAdmin, broadcastRoutes);
   api.use('/assets', requireAdmin, assetRoutes);
   api.use('/reports', requireAdmin, reportRoutes);

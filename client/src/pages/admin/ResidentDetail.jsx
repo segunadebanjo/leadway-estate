@@ -5,6 +5,8 @@ import { Badge, Card, ErrorNote, Field, Loading, Modal, Money, PageHeader, Stat,
 import { METHOD, date, dateTime, humanize, naira, toKobo } from '../../format.js';
 import { CredentialsNote, MemberForm } from './Residents.jsx';
 import { StatementView } from '../resident/Statement.jsx';
+import { HouseholdPanel } from '../Household.jsx';
+import { PlanForm, PlanModal, PlanTable } from './Plans.jsx';
 
 export default function ResidentDetail() {
   const { id } = useParams();
@@ -14,6 +16,9 @@ export default function ResidentDetail() {
   const [creds, setCreds] = useState(null);
   const [adjusting, setAdjusting] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [planning, setPlanning] = useState(false);
+  const [openPlan, setOpenPlan] = useState(null);
+  const plans = useFetch(`/api/plans?status=ALL&userId=${id}`);
   if (error) return <ErrorNote error={error} />;
   if (!data) return <Loading />;
   const { user: u, balance: b } = data;
@@ -47,6 +52,7 @@ export default function ResidentDetail() {
             <button className="btn btn-ghost" onClick={() => setEditing(true)}>Edit</button>
             <button className="btn btn-ghost" onClick={resetPw}>Reset password</button>
             {u.role === 'RESIDENT' && <button className="btn btn-ghost" onClick={() => setAdjusting(true)}>Adjust credit</button>}
+            {u.role === 'RESIDENT' && b.outstanding > 0 && !plans.data?.rows.some((p) => p.status === 'ACTIVE') && <button className="btn btn-ghost" onClick={() => setPlanning(true)}>Payment plan</button>}
             <button className={`btn ${u.isActive ? 'btn-danger' : ''}`} onClick={toggleActive}>{u.isActive ? 'Deactivate' : 'Reactivate'}</button>
           </>
         }
@@ -68,7 +74,11 @@ export default function ResidentDetail() {
           {u.mustChangePassword && (<><dt>Sign-in</dt><dd><Badge status="PENDING" label="Has not set a password yet" /></dd></>)}
         </dl>
       </Card>
-      <Tabs active={tab} onChange={setTab} tabs={[{ key: 'invoices', label: `Invoices (${data.invoices.length})` }, { key: 'payments', label: `Payments (${data.payments.length})` }, { key: 'statement', label: 'Statement' }, { key: 'credit', label: 'Credit history' }]} />
+      <Tabs active={tab} onChange={setTab} tabs={[{ key: 'invoices', label: `Invoices (${data.invoices.length})` }, { key: 'payments', label: `Payments (${data.payments.length})` }, { key: 'statement', label: 'Statement' }, { key: 'credit', label: 'Credit history' }, ...(u.role === 'RESIDENT' ? [{ key: 'plans', label: `Payment plans (${plans.data?.rows.length ?? 0})` }, { key: 'household', label: 'Household & vehicles' }] : [])]} />
+      {tab === 'plans' && <Card>{!plans.data ? <Loading /> : <PlanTable rows={plans.data.rows} hideMember onOpen={setOpenPlan} />}</Card>}
+      {tab === 'household' && <HouseholdPanel userId={u.id} />}
+      {planning && <PlanForm member={u} onClose={() => setPlanning(false)} onSaved={() => { setPlanning(false); setTab('plans'); plans.reload(); reload(); }} />}
+      {openPlan && <PlanModal plan={plans.data?.rows.find((p) => p.id === openPlan)} onClose={() => setOpenPlan(null)} onChanged={() => { setOpenPlan(null); plans.reload(); }} />}
       {tab === 'invoices' && (
         <Card>
           <Table rows={data.invoices} empty="No invoices." columns={[

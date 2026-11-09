@@ -33,6 +33,7 @@ export default function Home() {
           {b.credit > 0 && <Stat label="Account credit" value={naira(b.credit)} tone="good" hint="Used automatically on your next bills" />}
         </div>
       )}
+      {summary.data?.plan && <MyPlan plan={summary.data.plan} onPay={(amount) => b?.outstanding > 0 && setPaying({ max: b.outstanding, amount })} />}
       <Card title="Your bills" actions={<Link to="/statement">Full statement →</Link>}>
         {!invoices.data ? <Loading /> : (
           <Table rows={invoices.data.rows} empty="No bills yet." columns={[
@@ -52,8 +53,8 @@ export default function Home() {
   );
 }
 
-function PayModal({ invoice, max, onClose, onDone }) {
-  const [amount, setAmount] = useState(koboToInput(max));
+function PayModal({ invoice, max, amount: suggested, onClose, onDone }) {
+  const [amount, setAmount] = useState(koboToInput(Math.min(suggested || max, max)));
   const { busy, error, run, setError } = useSubmit(async () => {
     const k = toKobo(amount);
     if (!k) return setError(new Error('Enter a valid amount'));
@@ -76,5 +77,26 @@ function PayModal({ invoice, max, onClose, onDone }) {
         <button className="btn" disabled={busy}>{busy ? 'Opening Paystack…' : 'Continue to payment'}</button>
       </form>
     </Modal>
+  );
+}
+
+const PLAN_STATE = { PAID: ['PAID', 'Paid'], PART_PAID: ['PARTIAL', 'Part paid'], OVERDUE: ['OVERDUE', 'Overdue'], UPCOMING: ['PENDING', 'Upcoming'] };
+
+function MyPlan({ plan, onPay }) {
+  const next = plan.nextInstalment;
+  const due = plan.behind > 0 ? plan.behind : next ? next.amount - next.paidSoFar : 0;
+  return (
+    <Card title="Your payment plan" actions={due > 0 && <button className="btn" onClick={() => onPay(due)}>Pay {naira(due)}</button>}>
+      <p style={{ marginTop: 0 }}>
+        {naira(plan.totalAmount)} in {plan.instalments} monthly instalments. Paid so far {naira(plan.paid)}; {naira(plan.remaining)} to go.
+        {plan.behind > 0 ? <strong className="text-bad"> You are behind by {naira(plan.behind)}.</strong> : next && <> Next: {naira(next.amount - next.paidSoFar)} by {date(next.dueDate)}.</>}
+      </p>
+      <Table rows={plan.schedule} rowKey="number" columns={[
+        { key: 'number', label: '#' },
+        { key: 'dueDate', label: 'Due', render: (s) => date(s.dueDate) },
+        { key: 'amount', label: 'Amount', align: 'right', render: (s) => <Money v={s.amount} /> },
+        { key: 'state', label: '', render: (s) => <Badge status={PLAN_STATE[s.state][0]} label={PLAN_STATE[s.state][1]} /> },
+      ]} />
+    </Card>
   );
 }

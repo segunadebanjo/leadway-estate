@@ -47,8 +47,15 @@ export const config = {
     secure: env.SMTP_SECURE === 'true',
     user: env.SMTP_USER || '',
     pass: env.SMTP_PASS || '',
-    from: env.SMTP_FROM || 'Leadway Estate <no-reply@leadwayestate.ng>',
+    from: env.EMAIL_FROM || env.SMTP_FROM || 'Leadway Estate <no-reply@leadwayestate.ng>',
   },
+  // Brevo sends email over HTTPS (works where SMTP ports are blocked, e.g. free hosting).
+  brevo: {
+    apiKey: env.BREVO_API_KEY || '',
+    baseUrl: env.BREVO_BASE_URL || 'https://api.brevo.com',
+  },
+  // "Leadway Estate <estate@example.com>": the sender shown on every email.
+  emailFrom: env.EMAIL_FROM || env.SMTP_FROM || 'Leadway Estate <no-reply@leadwayestate.ng>',
   termii: {
     apiKey: env.TERMII_API_KEY || '',
     senderId: env.TERMII_SENDER_ID || 'Leadway',

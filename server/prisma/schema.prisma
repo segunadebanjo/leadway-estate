@@ -129,6 +129,12 @@ model User {
   expenses         Expense[]
   auditLogs        AuditLog[]
   resetTokens      PasswordResetToken[]
+  reminders        ReminderLog[]
+  paymentPlans     PaymentPlan[]
+  household        HouseholdMember[]
+  vehicles         Vehicle[]
+  pollVotes        PollVote[]
+  attendance       MeetingAttendance[]
 
   @@index([lastName, firstName])
   @@index([plotNumber])
@@ -412,4 +418,134 @@ model AuditLog {
 
   @@index([createdAt])
   @@index([entity, entityId])
+}
+
+// App settings an executive can change (reminder schedule, …): one JSON value per key.
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+// One row per reminder sent to a member who owes.
+model ReminderLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  amount    Int // kobo overdue when reminded
+  emailSent Boolean  @default(false)
+  smsSent   Boolean  @default(false)
+  automatic Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
+enum PlanStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+// An agreement to clear a debt in instalments. Bills stay as they are; the plan
+// is tracked against the cash the member pays from the day it was agreed.
+model PaymentPlan {
+  id           Int        @id @default(autoincrement())
+  userId       Int
+  totalAmount  Int // kobo agreed
+  instalments  Int
+  firstDueDate DateTime   @db.Date
+  startDate    DateTime   @db.Date // payments from this day count towards the plan
+  note         String?
+  status       PlanStatus @default(ACTIVE)
+  createdById  Int?
+  cancelReason String?
+  closedAt     DateTime?
+  createdAt    DateTime   @default(now())
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+}
+
+model HouseholdMember {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  name         String
+  relationship String // Spouse, Child, Relative, Domestic staff, Driver, Other
+  phone        String?
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Vehicle {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  plateNumber String // as written, e.g. "KJA 123 AB"
+  plateKey    String   @unique // upper case, letters and digits only: one household per plate
+  description String? // make, model, colour
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Poll {
+  id          Int          @id @default(autoincrement())
+  title       String
+  description String?
+  audience    Audience     @default(ALL) // ALL, OWNERS or TENANTS
+  closesAt    DateTime
+  closedAt    DateTime?
+  createdById Int?
+  createdAt   DateTime     @default(now())
+  options     PollOption[]
+  votes       PollVote[]
+}
+
+model PollOption {
+  id       Int        @id @default(autoincrement())
+  pollId   Int
+  label    String
+  position Int
+  poll     Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes    PollVote[]
+}
+
+model PollVote {
+  id        Int        @id @default(autoincrement())
+  pollId    Int
+  optionId  Int
+  userId    Int
+  createdAt DateTime   @default(now())
+  poll      Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  option    PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, userId]) // one vote per member, never changed
+}
+
+model Meeting {
+  id          Int                 @id @default(autoincrement())
+  title       String
+  startsAt    DateTime
+  location    String?
+  agenda      String?
+  createdById Int?
+  createdAt   DateTime            @default(now())
+  attendance  MeetingAttendance[]
+}
+
+model MeetingAttendance {
+  id        Int      @id @default(autoincrement())
+  meetingId Int
+  userId    Int
+  proxyName String? // someone attending on the member's behalf
+  markedAt  DateTime @default(now())
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, userId])
 }

@@ -105,6 +105,28 @@ router.post('/:id/check-out', gate, async (req, res) => {
   res.json(withState(await prisma.visitorPass.findUnique({ where: { id: pId }, include: { host: hostSelect } })));
 });
 
+// Gate check: who does this car or person belong to? Matches registered
+// vehicles, household members and residents (only active residents count).
+router.get('/lookup', gate, async (req, res) => {
+  const q = parse(z.object({ q: z.string().trim().min(2, 'Type at least 2 characters').max(60) }), req.query).q;
+  const key = q.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const host = { select: { ...hostSelect.select, isActive: true } };
+  const [vehicles, people, residents] = await Promise.all([
+    key.length >= 3 ? prisma.vehicle.findMany({ where: { plateKey: { contains: key } }, include: { user: host }, take: 10 }) : [],
+    prisma.householdMember.findMany({ where: { name: { contains: q, mode: 'insensitive' } }, include: { user: host }, take: 10 }),
+    prisma.user.findMany({
+      where: { role: 'RESIDENT', OR: [{ firstName: { contains: q, mode: 'insensitive' } }, { lastName: { contains: q, mode: 'insensitive' } }, { plotNumber: { equals: q, mode: 'insensitive' } }] },
+      select: { ...hostSelect.select, isActive: true },
+      take: 10,
+    }),
+  ]);
+  res.json({
+    vehicles: vehicles.map((v) => ({ plateNumber: v.plateNumber, description: v.description, host: v.user })),
+    people: people.map((p) => ({ name: p.name, relationship: p.relationship, phone: p.phone, host: p.user })),
+    residents,
+  });
+});
+
 // Today's expected and on-site visitors, plus a searchable log.
 router.get('/', gate, async (req, res) => {
   const q = parse(z.object({ scope: z.enum(['today', 'onsite', 'all']).default('today'), q: z.string().max(100).optional() }), req.query);

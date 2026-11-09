@@ -9,6 +9,7 @@ export { prisma, outbox, paystack };
 export const app = createApp();
 
 const TABLES = [
+  'Setting', 'ReminderLog', 'PaymentPlan', 'HouseholdMember', 'Vehicle', 'PollVote', 'PollOption', 'Poll', 'MeetingAttendance', 'Meeting',
   'AuditLog', 'Notification', 'Announcement', 'VisitorPass', 'ServiceRequest', 'Document', 'MaintenanceLog', 'StockMovement',
   'Asset', 'Expense', 'OnlinePayment', 'CreditEntry', 'PaymentAllocation', 'Payment', 'Invoice', 'FeeType', 'PasswordResetToken', 'User',
 ];

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../api.js';
 import { Card, ErrorNote, Field, MemberPicker, Money, PageHeader, Table, useSubmit } from '../../components/ui.jsx';
+import { ImportDialog } from '../../components/ImportDialog.jsx';
+import { METHOD } from '../../format.js';
 import { date, naira, toKobo, todayIso } from '../../format.js';
 
 // Pick a member, enter the amount: the server credits it to the member,
@@ -13,6 +15,7 @@ export default function ReceivePayment() {
   const [v, setV] = useState({ amount: '', method: 'CASH', paidAt: todayIso(), reference: '', note: '', invoiceId: '' });
   const [preview, setPreview] = useState(null);
   const [done, setDone] = useState(null);
+  const [importing, setImporting] = useState(false);
   const set = (k) => (e) => setV({ ...v, [k]: e.target.value });
   const kobo = toKobo(v.amount);
 
@@ -50,7 +53,35 @@ export default function ReceivePayment() {
 
   return (
     <>
-      <PageHeader title="Receive payment" subtitle="Record cash, bank transfer or POS payments. The payment is credited to the member and settles their oldest bills first." />
+      <PageHeader title="Receive payment" subtitle="Record cash, bank transfer or POS payments. The payment is credited to the member and settles their oldest bills first." actions={<button className="btn btn-ghost" onClick={() => setImporting(true)}>Upload bank statement</button>} />
+      {importing && (
+        <ImportDialog
+          title="Upload bank statement"
+          noun={['payment', 'payments']}
+          templateUrl="/api/payments/import/template"
+          templateName="payments_upload_template.xlsx"
+          uploadUrl="/api/payments/import"
+          intro="Download the estate account statement from your internet banking as Excel or CSV and upload it as it is. Each payment in is matched to a member by the LWE number in a Membership ID column or in the narration (e.g. “LWE 12”), else by phone number, else by name. Each is received exactly as on this page: oldest bills first, a receipt, and a notice to the member."
+          summary={(p) => `${p.ready.length ? ` (${naira(p.amount)} in total)` : ''}${p.notMoneyIn ? `, ${p.notMoneyIn} debit line(s) ignored` : ''}`}
+          columns={[
+            { key: 'date', label: 'Date', render: (r) => date(r.date) },
+            { key: 'member', label: 'Member', render: (r) => <><strong>{r.membershipId}</strong> {r.name}{r.inactive && <span className="muted"> (inactive)</span>}</> },
+            { key: 'matchedBy', label: 'Matched by' },
+            { key: 'method', label: 'Method', render: (r) => METHOD[r.method] },
+            { key: 'reference', label: 'Reference' },
+            { key: 'amount', label: 'Amount', align: 'right', render: (r) => <Money v={r.amount} /> },
+          ]}
+          renderDone={(r) => r.created.length > 0 && (
+            <div className="preview-scroll"><Table rows={r.created} rowKey="row" columns={[
+              { key: 'receiptNo', label: 'Receipt', render: (x) => <Link to={`/receipts/${x.paymentId}`}>{x.receiptNo}</Link> },
+              { key: 'member', label: 'Member', render: (x) => `${x.membershipId} ${x.name}` },
+              { key: 'amount', label: 'Amount', align: 'right', render: (x) => <Money v={x.amount} /> },
+              { key: 'credit', label: 'Kept as credit', align: 'right', render: (x) => (x.credit ? <Money v={x.credit} /> : '—') },
+            ]} /></div>
+          )}
+          onClose={() => setImporting(false)}
+        />
+      )}
       {done && (
         <div className="alert alert-good">
           Recorded {naira(done.payment.amount)} from {done.payment.user.firstName} {done.payment.user.lastName} — receipt <Link to={`/receipts/${done.payment.id}`}><strong>{done.payment.receiptNo}</strong></Link>
