@@ -39,6 +39,16 @@ the sample gate login (gate@example.com) and everything that belongs to them: th
 requests and visitor passes, plus the sample expenses and store items. Anything you entered yourself is kept.
 New members are then numbered straight on from your highest real one.
 
+## Adding many members at once (Excel upload)
+
+On **Residents**, press **Upload members**:
+
+1. Click **Download the Excel template** and fill it in, one member per row (first name, last name and email are required; phone, plot, street, owner/tenant and move-in date are optional). Your own spreadsheet also works if its first row names the columns; common names such as "Surname", "Mobile" or "House No" are recognised.
+2. Choose the file (.xlsx or .csv) and press **Check file**. Nothing is saved yet: you see who will be added, who is already in the app (skipped), and which rows need fixing.
+3. Press **Add**. Each new member gets a membership ID and a temporary password and is billed for the current month, exactly as with **Add member**. **Download the sign-in details** straight away: the passwords are shown only once.
+
+Uploading the same file twice adds nobody twice. **Expenses** has the same **Upload expenses** button for loading past spending. **Download list** on Residents saves the member register for Excel.
+
 ## Getting updates (after changes are made)
 
 Your data lives in the `local-data` folder, so updating the program never touches it.

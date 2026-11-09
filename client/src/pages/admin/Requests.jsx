@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, qs } from '../../api.js';
-import { Badge, Card, ErrorNote, Field, Loading, Modal, PageHeader, Pager, Table, useFetch, useSubmit } from '../../components/ui.jsx';
+import { Badge, Card, ErrorNote, Field, Loading, Modal, PageHeader, Pager, SearchField, Table, useDebounced, useFetch, useSubmit } from '../../components/ui.jsx';
 import { dateTime, fullName } from '../../format.js';
 
 export default function Requests() {
   const [params] = useSearchParams();
   const [status, setStatus] = useState('ACTIVE');
   const [page, setPage] = useState(1);
-  const { data, error, reload } = useFetch(`/api/admin/requests${qs({ status, page, pageSize: 50 })}`);
+  const [search, setSearch] = useState('');
+  const q = useDebounced(search);
+  const { data, error, reload } = useFetch(`/api/admin/requests${qs({ status, q, page, pageSize: 50 })}`);
   const [open, setOpen] = useState(params.get('open') ? Number(params.get('open')) : null);
   const current = data?.rows.find((r) => r.id === open);
   return (
@@ -16,6 +18,7 @@ export default function Requests() {
       <PageHeader title="Requests & complaints" subtitle="Raised by residents from their portal" />
       <Card>
         <div className="filters">
+          <SearchField placeholder="Title, resident, LWE-ID, plot" value={search} onChange={(v) => { setSearch(v); setPage(1); }} />
           <Field label="Status"><select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}><option value="ACTIVE">Open + in progress</option><option value="OPEN">Open</option><option value="IN_PROGRESS">In progress</option><option value="RESOLVED">Resolved</option><option value="CLOSED">Closed</option><option value="">All</option></select></Field>
         </div>
         <ErrorNote error={error} />

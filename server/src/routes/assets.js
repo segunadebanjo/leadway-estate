@@ -25,9 +25,10 @@ const assetBody = z.object({
 const lowStock = (a) => a.category === 'CONSUMABLE' && a.quantity <= a.minQuantity;
 
 router.get('/', async (req, res) => {
-  const q = parse(z.object({ category: z.enum(['EQUIPMENT', 'CONSUMABLE']).optional(), lowStock: z.enum(['true', 'false']).optional(), includeInactive: z.enum(['true', 'false']).optional() }), req.query);
+  const q = parse(z.object({ category: z.enum(['EQUIPMENT', 'CONSUMABLE']).optional(), lowStock: z.enum(['true', 'false']).optional(), includeInactive: z.enum(['true', 'false']).optional(), q: z.string().trim().max(100).optional() }), req.query);
+  const search = q.q ? { OR: ['name', 'location', 'serialNumber', 'notes'].map((k) => ({ [k]: { contains: q.q, mode: 'insensitive' } })) } : {};
   const rows = await prisma.asset.findMany({
-    where: { ...(q.category ? { category: q.category } : {}), ...(q.includeInactive === 'true' ? {} : { isActive: true }) },
+    where: { ...search, ...(q.category ? { category: q.category } : {}), ...(q.includeInactive === 'true' ? {} : { isActive: true }) },
     orderBy: [{ category: 'asc' }, { name: 'asc' }],
     include: { maintenance: { select: { cost: true } } },
   });

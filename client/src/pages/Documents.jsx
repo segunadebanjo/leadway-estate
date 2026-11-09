@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { api } from '../api.js';
+import { api, qs } from '../api.js';
 import { useAuth } from '../auth.jsx';
-import { Card, ErrorNote, Field, Loading, Modal, PageHeader, Table, useFetch, useSubmit } from '../components/ui.jsx';
+import { Card, ErrorNote, Field, Loading, Modal, PageHeader, SearchField, Table, useDebounced, useFetch, useSubmit } from '../components/ui.jsx';
 import { date } from '../format.js';
 
 const size = (b) => (b > 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MB` : `${Math.ceil(b / 1024)} KB`);
@@ -11,7 +11,9 @@ export default function Documents() {
   const isAdmin = user.role === 'ADMIN';
   const [category, setCategory] = useState('');
   const [uploading, setUploading] = useState(false);
-  const { data, error, reload } = useFetch(`/api/documents${category ? `?category=${encodeURIComponent(category)}` : ''}`);
+  const [search, setSearch] = useState('');
+  const q = useDebounced(search);
+  const { data, error, reload } = useFetch(`/api/documents${qs({ category, q })}`);
   const remove = async (d) => {
     if (!confirm(`Delete "${d.title}"? This cannot be undone.`)) return;
     await api.del(`/api/documents/${d.id}`);
@@ -26,6 +28,7 @@ export default function Documents() {
       ) : (
         <Card>
           <div className="filters">
+            <SearchField placeholder="Title or file name" value={search} onChange={setSearch} />
             <Field label="Category">
               <select value={category} onChange={(e) => setCategory(e.target.value)}>
                 <option value="">All</option>

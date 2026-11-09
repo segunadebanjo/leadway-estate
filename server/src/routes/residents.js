@@ -8,6 +8,7 @@ import { sendEmail } from '../lib/messaging.js';
 import { MAX_AMOUNT } from '../lib/money.js';
 import { dateOnly } from '../lib/dates.js';
 import { parse, paging, pageQuery, z, id, email, text, optionalText, isoDate } from '../lib/validate.js';
+import { asDate, asPhone, asText, isBlank, readSheet, sendXlsx, sheetUpload, templateBuffer } from '../lib/sheet.js';
 import { adjustCredit, memberBalance, outstandingByMember, paymentInclude } from '../services/ledger.js';
 import { billMemberNow } from '../services/billing.js';
 
@@ -135,8 +136,8 @@ async function issueTemporaryPassword(user, sendIt, reason) {
   return { temporaryPassword: password, emailed };
 }
 
-router.post('/', async (req, res) => {
-  const body = parse(memberBody.extend({ sendEmail: z.boolean().default(false) }), req.body);
+/** Creates one member exactly as the Add member form does: temporary password, bill now. */
+async function createMember(req, body, sendIt) {
   let user;
   try {
     user = await prisma.user.create({
@@ -158,10 +159,111 @@ router.post('/', async (req, res) => {
     if (isUniqueViolation(err, 'email')) throw conflict('A member with that email already exists');
     throw err;
   }
-  const creds = await issueTemporaryPassword(user, body.sendEmail, `An account has been created for you on the ${config.estateName} residents' portal.`);
+  const creds = await issueTemporaryPassword(user, sendIt, `An account has been created for you on the ${config.estateName} residents' portal.`);
   const invoicesCreated = user.role === 'RESIDENT' ? await billMemberNow(user.id) : 0;
   await audit(req, 'member.create', 'User', user.id, { membershipId: user.membershipId, role: user.role });
-  res.status(201).json({ user, ...creds, invoicesCreated });
+  return { user, ...creds, invoicesCreated };
+}
+
+router.post('/', async (req, res) => {
+  const body = parse(memberBody.extend({ sendEmail: z.boolean().default(false) }), req.body);
+  res.status(201).json(await createMember(req, body, body.sendEmail));
+});
+
+// ---- Upload a list of members (Excel or CSV) ---------------------------------
+
+const IMPORT_FIELDS = [
+  { key: 'firstName', label: 'First name', required: true, aliases: ['firstname', 'given name', 'forename', 'other names'] },
+  { key: 'lastName', label: 'Last name', required: true, aliases: ['surname', 'lastname', 'family name'] },
+  { key: 'email', label: 'Email', required: true, aliases: ['e-mail', 'email address', 'mail'] },
+  { key: 'phone', label: 'Phone', text: true, aliases: ['phone number', 'mobile', 'mobile number', 'telephone', 'tel', 'gsm', 'whatsapp'] },
+  { key: 'plotNumber', label: 'Plot number', text: true, aliases: ['plot', 'plot no', 'house number', 'house no', 'house', 'block'] },
+  { key: 'street', label: 'Street', aliases: ['street name', 'address', 'road', 'close'] },
+  { key: 'occupancyType', label: 'Owner or tenant', aliases: ['occupancy', 'occupancy type', 'status', 'type', 'owner/tenant', 'landlord or tenant'] },
+  { key: 'moveInDate', label: 'Moved in', aliases: ['move in date', 'moved in date', 'date moved in', 'move-in date', 'since'] },
+];
+
+function importRow(values) {
+  const occ = norm(values.occupancyType);
+  const occupancyType = !occ ? 'OWNER' : /^(owner|landlord|landlady|own|o)$/.test(occ) ? 'OWNER' : /^(tenant|renter|rent|lessee|t)$/.test(occ) ? 'TENANT' : null;
+  const moveIn = isBlank(values.moveInDate) ? null : asDate(values.moveInDate);
+  const problems = [];
+  if (!occupancyType) problems.push(`"Owner or tenant" must be Owner or Tenant (it says "${asText(values.occupancyType)}")`);
+  if (!isBlank(values.moveInDate) && !moveIn) problems.push(`"Moved in" is not a date we can read ("${asText(values.moveInDate)}"); use e.g. 15/03/2024`);
+  const r = memberBody.safeParse({
+    firstName: asText(values.firstName),
+    lastName: asText(values.lastName),
+    email: asText(values.email),
+    phone: asPhone(values.phone) || null,
+    plotNumber: asText(values.plotNumber) || null,
+    street: asText(values.street) || null,
+    occupancyType: occupancyType || 'OWNER',
+    role: 'RESIDENT',
+    moveInDate: moveIn,
+  });
+  if (isBlank(values.email)) problems.push('Email is required (it is the member\'s sign-in name)');
+  if (!r.success) for (const i of r.error.issues) if (!(i.path[0] === 'email' && isBlank(values.email))) problems.push(`${IMPORT_FIELDS.find((f) => f.key === i.path[0])?.label || i.path[0]} ${i.message === 'Required' ? 'is required' : i.message}`);
+  return problems.length ? { problems } : { data: r.data };
+}
+const norm = (v) => asText(v).toLowerCase().replace(/[^a-z]/g, '');
+
+router.get('/import/template', async (_req, res) => {
+  sendXlsx(res, 'members_upload_template.xlsx', await templateBuffer({
+    sheetName: 'Members',
+    fields: IMPORT_FIELDS,
+    examples: [
+      { firstName: 'Adaeze', lastName: 'Okafor', email: 'adaeze.okafor@gmail.com', phone: '08031234567', plotNumber: '14', street: 'Leadway Road', occupancyType: 'Owner', moveInDate: '15/03/2021' },
+      { firstName: 'Tunde', lastName: 'Bello', email: 'tunde.bello@yahoo.com', phone: '08059876543', plotNumber: '7B', street: 'Unity Close', occupancyType: 'Tenant', moveInDate: '' },
+    ],
+    notes: [
+      'How to fill the Members sheet',
+      '',
+      'Replace the two example rows with your members: one member per row. Columns marked * must be filled.',
+      'Email is the member\'s sign-in name, so each member needs their own email address.',
+      'Owner or tenant: write Owner or Tenant. Blank means Owner.',
+      'Moved in: a date such as 15/03/2021 (day first). It can be left blank.',
+      'Each member gets a membership ID (LWE-...) and a temporary password automatically, and is billed for the current month straight away.',
+      'Members whose email is already in the app are skipped, so uploading the same file twice does not create duplicates.',
+      'You can also upload a CSV file, or your own spreadsheet as long as the first row has these column names.',
+    ],
+  }));
+});
+
+router.post('/import', sheetUpload, async (req, res) => {
+  const opts = parse(z.object({ dryRun: z.enum(['true', 'false']).default('true'), sendEmail: z.enum(['true', 'false']).default('false') }), req.body);
+  const { rows, ignored } = await readSheet(req.file, IMPORT_FIELDS);
+  if (!rows.length) throw badRequest('The file has column headings but no members under them');
+  const parsed = rows.map((r) => ({ row: r.rowNumber, ...importRow(r.values) }));
+  const emails = parsed.filter((p) => p.data).map((p) => p.data.email);
+  const existing = new Map((await prisma.user.findMany({ where: { email: { in: emails } }, select: { email: true, membershipId: true } })).map((u) => [u.email, u.membershipId]));
+  const seen = new Map();
+  const errors = [];
+  const skipped = [];
+  const ready = [];
+  for (const p of parsed) {
+    if (p.problems) { errors.push({ row: p.row, message: p.problems.join('; ') }); continue; }
+    const name = `${p.data.firstName} ${p.data.lastName}`;
+    if (existing.has(p.data.email)) { skipped.push({ row: p.row, name, message: `${p.data.email} is already ${existing.get(p.data.email)}` }); continue; }
+    if (seen.has(p.data.email)) { errors.push({ row: p.row, message: `${p.data.email} is also on row ${seen.get(p.data.email)}; each member needs their own email` }); continue; }
+    seen.set(p.data.email, p.row);
+    ready.push({ row: p.row, ...p.data });
+  }
+  const summary = { total: rows.length, ignoredColumns: ignored, errors, skipped };
+  if (opts.dryRun === 'true') return res.json({ ...summary, ready });
+
+  const created = [];
+  for (const r of ready) {
+    const { row, ...data } = r;
+    try {
+      const out = await createMember(req, data, opts.sendEmail === 'true');
+      created.push({ row, membershipId: out.user.membershipId, firstName: out.user.firstName, lastName: out.user.lastName, email: out.user.email, phone: out.user.phone, plotNumber: out.user.plotNumber, street: out.user.street, temporaryPassword: out.temporaryPassword, emailed: out.emailed, invoicesCreated: out.invoicesCreated });
+    } catch (err) {
+      if (err.status !== 409) throw err;
+      skipped.push({ row, name: `${data.firstName} ${data.lastName}`, message: `${data.email} was added by someone else just now` });
+    }
+  }
+  await audit(req, 'member.import', 'User', null, { file: req.file.originalname, rows: rows.length, created: created.length, skipped: skipped.length, errors: errors.length });
+  res.status(201).json({ ...summary, created });
 });
 
 router.patch('/:id', async (req, res) => {

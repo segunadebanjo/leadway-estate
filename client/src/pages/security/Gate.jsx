@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api, qs } from '../../api.js';
-import { Badge, Card, ErrorNote, Field, Loading, PageHeader, Table, Tabs, useFetch, useSubmit } from '../../components/ui.jsx';
+import { Badge, Card, ErrorNote, Field, Loading, PageHeader, SearchField, Table, Tabs, useFetch, useSubmit } from '../../components/ui.jsx';
 import { dateTime, fullName } from '../../format.js';
 
 export default function Gate() {
@@ -39,7 +39,7 @@ export default function Gate() {
         </Card>
         <Card title="Visitors">
           <Tabs active={scope} onChange={setScope} tabs={[{ key: 'today', label: 'Expected & on site' }, { key: 'onsite', label: 'On site' }, { key: 'all', label: 'Log' }]} />
-          <div className="filters"><Field label="Search"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, code or plate" /></Field></div>
+          <div className="filters"><SearchField value={q} onChange={setQ} placeholder="Name, code or plate" /></div>
           {!log.data ? <Loading /> : (
             <Table rows={log.data.rows} empty="No visitors." columns={[
               { key: 'v', label: 'Visitor', render: (p) => <><strong>{p.visitorName}</strong>{p.vehiclePlate && <span className="muted"> · {p.vehiclePlate}</span>}<div className="muted">to {fullName(p.host)}, Plot {p.host.plotNumber || '—'}</div></> },

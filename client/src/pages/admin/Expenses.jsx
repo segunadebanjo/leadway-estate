@@ -1,18 +1,25 @@
 import { useState } from 'react';
 import { api, qs } from '../../api.js';
-import { Card, ErrorNote, Field, Loading, Modal, Money, PageHeader, Pager, Table, useFetch, useSubmit } from '../../components/ui.jsx';
-import { date, fullName, koboToInput, toKobo, todayIso } from '../../format.js';
+import { Card, ErrorNote, Field, Loading, Modal, Money, PageHeader, Pager, SearchField, Table, useDebounced, useFetch, useSubmit } from '../../components/ui.jsx';
+import { ImportDialog } from '../../components/ImportDialog.jsx';
+import { date, fullName, koboToInput, naira, toKobo, todayIso } from '../../format.js';
 
 export default function Expenses() {
-  const [f, setF] = useState({ from: `${todayIso().slice(0, 7)}-01`, to: todayIso(), category: '', page: 1 });
-  const { data, error, reload } = useFetch(`/api/admin/expenses${qs({ ...f, pageSize: 50 })}`);
+  const [f, setF] = useState({ from: `${todayIso().slice(0, 7)}-01`, to: todayIso(), category: '', q: '', page: 1 });
+  const q = useDebounced(f.q);
+  const { data, error, reload } = useFetch(`/api/admin/expenses${qs({ ...f, q, pageSize: 50 })}`);
+  const [importing, setImporting] = useState(false);
   const [editing, setEditing] = useState(null);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value, page: 1 });
   return (
     <>
-      <PageHeader title="Expenses" subtitle="What the association spends. Feeds the Income & Expenditure report." actions={<button className="btn" onClick={() => setEditing({})}>Record expense</button>} />
+      <PageHeader title="Expenses" subtitle="What the association spends. Feeds the Income & Expenditure report." actions={<>
+        <button className="btn btn-ghost" onClick={() => setImporting(true)}>Upload expenses</button>
+        <button className="btn" onClick={() => setEditing({})}>Record expense</button>
+      </>} />
       <Card>
         <div className="filters">
+          <SearchField placeholder="Description, payee, reference, amount" value={f.q} onChange={(v) => setF({ ...f, q: v, page: 1 })} />
           <Field label="From"><input type="date" value={f.from} onChange={set('from')} /></Field>
           <Field label="To"><input type="date" value={f.to} onChange={set('to')} /></Field>
           <Field label="Category"><select value={f.category} onChange={set('category')}><option value="">All</option>{data?.categories.map((c) => <option key={c}>{c}</option>)}</select></Field>
@@ -33,6 +40,27 @@ export default function Expenses() {
           </>
         )}
       </Card>
+      {importing && (
+        <ImportDialog
+          title="Upload expenses"
+          noun={['expense', 'expenses']}
+          templateUrl="/api/admin/expenses/import/template"
+          templateName="expenses_upload_template.xlsx"
+          uploadUrl="/api/admin/expenses/import"
+          intro="Record many expenses at once, for example last year's spending from your cash book. They feed the Income & Expenditure report like any other expense."
+          summary={(p) => (p.ready.length ? ` (${naira(p.amount)} in total)` : '')}
+          columns={[
+            { key: 'date', label: 'Date' },
+            { key: 'category', label: 'Category' },
+            { key: 'description', label: 'Description' },
+            { key: 'payee', label: 'Payee' },
+            { key: 'reference', label: 'Reference' },
+            { key: 'amount', label: 'Amount', align: 'right', render: (r) => <Money v={r.amount} /> },
+          ]}
+          onClose={() => setImporting(false)}
+          onImported={reload}
+        />
+      )}
       {editing && data && <ExpenseForm expense={editing} categories={data.categories} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />}
     </>
   );

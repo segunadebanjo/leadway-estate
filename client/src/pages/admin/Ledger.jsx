@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, qs } from '../../api.js';
-import { Badge, Card, ErrorNote, Field, Loading, MemberPicker, Modal, Money, PageHeader, Pager, Table, Tabs, useFetch, useSubmit } from '../../components/ui.jsx';
+import { Badge, Card, ErrorNote, Field, Loading, MemberPicker, Modal, Money, PageHeader, Pager, SearchField, Table, useDebounced, Tabs, useFetch, useSubmit } from '../../components/ui.jsx';
 import { METHOD, addDaysIso, date, dateTime, fullName, humanize, koboToInput, naira, toKobo, todayIso } from '../../format.js';
 
 export default function Ledger() {
@@ -22,12 +22,12 @@ export default function Ledger() {
 function Invoices() {
   const [f, setF] = useState({ q: '', status: 'OPEN', overdue: '', feeTypeId: '', page: 1 });
   const fees = useFetch('/api/ledger/fee-types');
-  const { data, error } = useFetch(`/api/ledger/invoices${qs({ ...f, pageSize: 50 })}`);
+  const { data, error } = useFetch(`/api/ledger/invoices${qs({ ...f, q: useDebounced(f.q), pageSize: 50 })}`);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value, page: 1 });
   return (
     <Card>
       <div className="filters">
-        <Field label="Member"><input placeholder="Name, LWE-ID, plot" value={f.q} onChange={set('q')} /></Field>
+        <SearchField label="Member" placeholder="Name, LWE-ID, plot" value={f.q} onChange={(v) => setF({ ...f, q: v, page: 1 })} />
         <Field label="Status"><select value={f.status} onChange={set('status')}><option value="">All</option><option value="OPEN">Open (unpaid + part-paid)</option><option value="UNPAID">Unpaid</option><option value="PARTIAL">Part-paid</option><option value="PAID">Paid</option><option value="VOID">Void</option></select></Field>
         <Field label="Fee"><select value={f.feeTypeId} onChange={set('feeTypeId')}><option value="">All</option>{fees.data?.rows.map((ft) => <option key={ft.id} value={ft.id}>{ft.name}</option>)}</select></Field>
         <Field label="Overdue"><select value={f.overdue} onChange={set('overdue')}><option value="">Any</option><option value="true">Overdue only</option></select></Field>
@@ -54,12 +54,12 @@ function Invoices() {
 
 function Payments() {
   const [f, setF] = useState({ q: '', method: '', status: '', from: '', to: '', page: 1 });
-  const { data, error } = useFetch(`/api/payments${qs({ ...f, pageSize: 50 })}`);
+  const { data, error } = useFetch(`/api/payments${qs({ ...f, q: useDebounced(f.q), pageSize: 50 })}`);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value, page: 1 });
   return (
     <Card>
       <div className="filters">
-        <Field label="Search"><input placeholder="Receipt, reference, member" value={f.q} onChange={set('q')} /></Field>
+        <SearchField placeholder="Receipt, reference, member" value={f.q} onChange={(v) => setF({ ...f, q: v, page: 1 })} />
         <Field label="Method"><select value={f.method} onChange={set('method')}><option value="">All</option>{Object.entries(METHOD).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
         <Field label="Status"><select value={f.status} onChange={set('status')}><option value="">All</option><option value="COMPLETED">Completed</option><option value="REVERSED">Reversed</option></select></Field>
         <Field label="From"><input type="date" value={f.from} onChange={set('from')} /></Field>

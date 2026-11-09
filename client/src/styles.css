@@ -282,3 +282,13 @@ textarea { min-height: 110px; resize: vertical; }
   body { background: #fff; color: #000; }
   .card, .stat, .receipt { box-shadow: none; border-color: #ccc; }
 }
+
+/* Spreadsheet uploads */
+.steps { margin: 0 0 14px; padding-left: 20px; line-height: 1.6; }
+.link-button { background: none; border: 0; padding: 0; color: var(--brand); font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+.upload-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.upload-row input[type='file'] { flex: 1 1 260px; width: auto; }
+.preview-scroll { max-height: 320px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; }
+.preview-scroll .table-wrap { margin: 0; }
+.filters .field { margin-bottom: 0; }
+.section-title { font-size: 1rem; margin: 14px 0 8px; }

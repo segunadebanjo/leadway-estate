@@ -1,20 +1,22 @@
 import { useState } from 'react';
 import { api, qs } from '../../api.js';
-import { Badge, Card, ErrorNote, Field, Loading, Modal, Money, PageHeader, Table, Tabs, useFetch, useSubmit } from '../../components/ui.jsx';
+import { Badge, Card, ErrorNote, Field, Loading, Modal, Money, PageHeader, SearchField, Table, Tabs, useDebounced, useFetch, useSubmit } from '../../components/ui.jsx';
 import { date, dateTime, fullName, humanize, koboToInput, toKobo, todayIso } from '../../format.js';
 
 export default function Assets() {
-  const [f, setF] = useState({ category: '', lowStock: '' });
-  const { data, error, reload } = useFetch(`/api/assets${qs(f)}`);
+  const [f, setF] = useState({ category: '', lowStock: '', q: '' });
+  const q = useDebounced(f.q);
+  const { data, error, reload } = useFetch(`/api/assets${qs({ ...f, q })}`);
   const [open, setOpen] = useState(null);
   const [editing, setEditing] = useState(null);
   const low = data?.rows.filter((a) => a.lowStock) || [];
   return (
     <>
       <PageHeader title="Assets" subtitle="Equipment and consumables, stock movements and maintenance" actions={<button className="btn" onClick={() => setEditing({})}>Add item</button>} />
-      {low.length > 0 && !f.lowStock && <div className="alert alert-warn">Low stock: {low.map((a) => `${a.name} (${a.quantity} ${a.unit})`).join(', ')}</div>}
+      {low.length > 0 && !f.lowStock && !f.q && <div className="alert alert-warn">Low stock: {low.map((a) => `${a.name} (${a.quantity} ${a.unit})`).join(', ')}</div>}
       <Card>
         <div className="filters">
+          <SearchField placeholder="Item, location, serial no." value={f.q} onChange={(v) => setF({ ...f, q: v })} />
           <Field label="Category"><select value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}><option value="">All</option><option value="EQUIPMENT">Equipment</option><option value="CONSUMABLE">Consumables</option></select></Field>
           <Field label="Stock"><select value={f.lowStock} onChange={(e) => setF({ ...f, lowStock: e.target.value })}><option value="">All</option><option value="true">Low stock only</option></select></Field>
         </div>

@@ -23,6 +23,25 @@ export function useFetch(url) {
   return { ...state, reload: load };
 }
 
+/** `value`, but only once it has stopped changing for `ms` (for search boxes). */
+export function useDebounced(value, ms = 300) {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return v;
+}
+
+/** A search box for a filters row. */
+export function SearchField({ value, onChange, placeholder, label = 'Search' }) {
+  return (
+    <Field label={label} className="grow">
+      <input type="search" placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} />
+    </Field>
+  );
+}
+
 export function PageHeader({ title, subtitle, actions }) {
   return (
     <div className="page-header">
@@ -157,9 +176,9 @@ export function Modal({ title, onClose, children, wide }) {
   );
 }
 
-export function Field({ label, hint, children, error }) {
+export function Field({ label, hint, children, error, className = '' }) {
   return (
-    <label className="field">
+    <label className={`field ${className}`}>
       <span className="field-label">{label}</span>
       {children}
       {hint && !error && <span className="field-hint">{hint}</span>}

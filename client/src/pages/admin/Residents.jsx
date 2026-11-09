@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, qs } from '../../api.js';
-import { Badge, Card, ErrorNote, Field, Loading, Modal, Money, PageHeader, Pager, Table, useFetch, useSubmit } from '../../components/ui.jsx';
+import { Badge, Card, ErrorNote, Field, Loading, Modal, Money, PageHeader, Pager, SearchField, Table, downloadCsv, useDebounced, useFetch, useSubmit } from '../../components/ui.jsx';
+import { ImportDialog, saveCsv } from '../../components/ImportDialog.jsx';
 import { humanize } from '../../format.js';
 
 export default function Residents() {
@@ -9,15 +10,23 @@ export default function Residents() {
   const [f, setF] = useState({ q: '', status: 'active', occupancy: '', role: 'RESIDENT', owing: '', page: 1 });
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState(null);
-  const { data, error, reload } = useFetch(`/api/residents${qs({ ...f, pageSize: 50 })}`);
+  const [importing, setImporting] = useState(false);
+  const [dlError, setDlError] = useState(null);
+  const q = useDebounced(f.q);
+  const { data, error, reload } = useFetch(`/api/residents${qs({ ...f, q, pageSize: 50 })}`);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value, page: 1 });
   return (
     <>
-      <PageHeader title="Residents" subtitle="Members, staff and their balances" actions={<button className="btn" onClick={() => setCreating(true)}>Add member</button>} />
+      <PageHeader title="Residents" subtitle="Members, staff and their balances" actions={<>
+        <button className="btn btn-ghost" onClick={() => downloadCsv('/api/reports/members?format=csv', 'member_register.csv').catch(setDlError)}>Download list</button>
+        <button className="btn btn-ghost" onClick={() => setImporting(true)}>Upload members</button>
+        <button className="btn" onClick={() => setCreating(true)}>Add member</button>
+      </>} />
+      <ErrorNote error={dlError} />
       {created && <CredentialsNote data={created} onClose={() => setCreated(null)} />}
       <Card>
         <div className="filters">
-          <Field label="Search"><input className="grow" placeholder="Name, LWE-ID, plot, phone, email" value={f.q} onChange={set('q')} /></Field>
+          <SearchField placeholder="Name, LWE-ID, plot, phone, email" value={f.q} onChange={(v) => setF({ ...f, q: v, page: 1 })} />
           <Field label="Status"><select value={f.status} onChange={set('status')}><option value="active">Active</option><option value="inactive">Inactive</option><option value="all">All</option></select></Field>
           <Field label="Occupancy"><select value={f.occupancy} onChange={set('occupancy')}><option value="">All</option><option value="OWNER">Owners</option><option value="TENANT">Tenants</option></select></Field>
           <Field label="Type"><select value={f.role} onChange={set('role')}><option value="RESIDENT">Residents</option><option value="ADMIN">Executives (admin)</option><option value="SECURITY">Security staff</option><option value="ALL">Everyone</option></select></Field>
@@ -45,6 +54,7 @@ export default function Residents() {
           </>
         )}
       </Card>
+      {importing && <ImportMembers onClose={() => setImporting(false)} onImported={reload} />}
       {creating && <MemberForm onClose={() => setCreating(false)} onSaved={(r) => { setCreating(false); setCreated(r); reload(); }} />}
     </>
   );
@@ -106,5 +116,48 @@ export function MemberForm({ member, onClose, onSaved }) {
         <button className="btn" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Create member'}</button>
       </form>
     </Modal>
+  );
+}
+
+const SIGN_IN_COLUMNS = [
+  { key: 'membershipId', label: 'Membership ID' },
+  { key: 'name', label: 'Name', map: (r) => `${r.firstName} ${r.lastName}` },
+  { key: 'plot', label: 'Plot / street', map: (r) => [r.plotNumber, r.street].filter(Boolean).join(', ') },
+  { key: 'phone', label: 'Phone' },
+  { key: 'email', label: 'Email (sign-in)' },
+  { key: 'temporaryPassword', label: 'Temporary password' },
+];
+
+function ImportMembers({ onClose, onImported }) {
+  return (
+    <ImportDialog
+      title="Upload members"
+      noun={['member', 'members']}
+      templateUrl="/api/residents/import/template"
+      templateName="members_upload_template.xlsx"
+      uploadUrl="/api/residents/import"
+      intro="Add many residents at once from an Excel sheet. Each one gets a membership ID and a temporary password, and is billed for the current month, exactly as with Add member."
+      options={{ sendEmail: false }}
+      renderOptions={(o, set) => <label className="check"><input type="checkbox" checked={o.sendEmail} onChange={(e) => set({ sendEmail: e.target.checked })} /> Email each member their sign-in details</label>}
+      columns={[
+        { key: 'name', label: 'Name', render: (r) => `${r.firstName} ${r.lastName}` },
+        { key: 'email', label: 'Email' },
+        { key: 'phone', label: 'Phone' },
+        { key: 'plot', label: 'Plot / street', render: (r) => [r.plotNumber, r.street].filter(Boolean).join(', ') },
+        { key: 'occupancyType', label: 'Occupancy', render: (r) => humanize(r.occupancyType) },
+        { key: 'moveInDate', label: 'Moved in' },
+      ]}
+      renderDone={(r) => r.created.length > 0 && (
+        <>
+          <div className="alert alert-warn">
+            <strong>Save the sign-in details now.</strong> The temporary passwords are shown only once. Download the list and give each member their password; they choose their own at first sign-in.
+          </div>
+          <button className="btn" style={{ marginBottom: 12 }} onClick={() => saveCsv(`new_members_sign_in_${new Date().toISOString().slice(0, 10)}.csv`, SIGN_IN_COLUMNS, r.created)}>Download sign-in details (Excel/CSV)</button>
+          <div className="preview-scroll"><Table rows={r.created} rowKey="membershipId" columns={SIGN_IN_COLUMNS.map((c) => ({ ...c, render: c.map }))} /></div>
+        </>
+      )}
+      onClose={onClose}
+      onImported={onImported}
+    />
   );
 }

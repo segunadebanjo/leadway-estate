@@ -36,9 +36,12 @@ export function detectDocType(originalName, buffer) {
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_BYTES, files: 1 } });
 
 router.get('/', requireAuth, async (req, res) => {
-  const q = parse(z.object({ category: z.string().max(60).optional() }), req.query);
+  const q = parse(z.object({ category: z.string().max(60).optional(), q: z.string().trim().max(100).optional() }), req.query);
   const rows = await prisma.document.findMany({
-    where: q.category ? { category: q.category } : {},
+    where: {
+      ...(q.category ? { category: q.category } : {}),
+      ...(q.q ? { OR: [{ title: { contains: q.q, mode: 'insensitive' } }, { originalName: { contains: q.q, mode: 'insensitive' } }] } : {}),
+    },
     orderBy: { createdAt: 'desc' },
     select: { id: true, title: true, category: true, originalName: true, mimeType: true, sizeBytes: true, createdAt: true, uploadedBy: { select: { firstName: true, lastName: true } } },
   });
