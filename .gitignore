@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+server/uploads/
+server/tests/uploads-test/
+*.log
+.DS_Store

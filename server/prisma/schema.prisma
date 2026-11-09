@@ -1,0 +1,412 @@
+// Leadway Estate – association management.
+// Money is stored as integer kobo (₦1 = 100 kobo) everywhere: no floating point.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  RESIDENT
+  SECURITY
+}
+
+enum OccupancyType {
+  OWNER
+  TENANT
+}
+
+enum BillingFrequency {
+  MONTHLY
+  ANNUAL
+  ONE_OFF
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  VOID
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  POS
+  PAYSTACK
+  ACCOUNT_CREDIT
+}
+
+enum PaymentStatus {
+  COMPLETED
+  REVERSED
+}
+
+enum CreditKind {
+  OVERPAYMENT // excess of a payment kept on account
+  APPLIED // credit used to settle an invoice
+  REVERSAL // a reversed payment takes back its credit
+  ADJUSTMENT // manual executive adjustment
+}
+
+enum OnlinePaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum AssetCategory {
+  EQUIPMENT
+  CONSUMABLE
+}
+
+enum StockMovementType {
+  USED
+  RESTOCKED
+  RELOCATED
+  ADJUSTED
+}
+
+enum Audience {
+  ALL
+  OWNERS
+  TENANTS
+  SELECTED
+}
+
+enum RequestStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum VisitorPassStatus {
+  ACTIVE
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+}
+
+model User {
+  id                 Int           @id @default(autoincrement())
+  // LWE-0001, LWE-0002 … assigned by the database from a sequence; never editable.
+  membershipId       String        @unique @default(dbgenerated("('LWE-'::text || lpad((nextval('membership_id_seq'::regclass))::text, 4, '0'::text))"))
+  email              String        @unique
+  passwordHash       String
+  role               Role          @default(RESIDENT)
+  firstName          String
+  lastName           String
+  phone              String?
+  plotNumber         String?
+  street             String?
+  occupancyType      OccupancyType @default(OWNER)
+  moveInDate         DateTime?     @db.Date
+  isActive           Boolean       @default(true)
+  mustChangePassword Boolean       @default(true)
+  creditBalance      Int           @default(0) // kobo, cached sum of CreditEntry
+  tokenVersion       Int           @default(0) // bump to sign the user out everywhere
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  invoices         Invoice[]
+  payments         Payment[]          @relation("PaymentMember")
+  recordedPayments Payment[]          @relation("PaymentRecorder")
+  creditEntries    CreditEntry[]
+  onlinePayments   OnlinePayment[]
+  notifications    Notification[]
+  announcements    Announcement[]
+  documents        Document[]
+  stockMovements   StockMovement[]
+  serviceRequests  ServiceRequest[]
+  visitorPasses    VisitorPass[]      @relation("PassHost")
+  gateCheckIns     VisitorPass[]      @relation("PassGuard")
+  expenses         Expense[]
+  auditLogs        AuditLog[]
+  resetTokens      PasswordResetToken[]
+
+  @@index([lastName, firstName])
+  @@index([plotNumber])
+}
+
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model FeeType {
+  id          Int              @id @default(autoincrement())
+  code        String           @unique // MONTHLY_DUE, ANNUAL_DEV_FEE, …
+  name        String
+  amount      Int // kobo; changing it affects future invoices only
+  frequency   BillingFrequency
+  isActive    Boolean          @default(true)
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  invoices    Invoice[]
+}
+
+model Invoice {
+  id          Int           @id @default(autoincrement())
+  userId      Int
+  feeTypeId   Int
+  // "2026-11" for monthly, "2026" for annual, null for one-off fees.
+  period      String?
+  description String
+  amount      Int // kobo
+  amountPaid  Int           @default(0)
+  dueDate     DateTime      @db.Date
+  status      InvoiceStatus @default(UNPAID)
+  voidReason  String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  user        User                @relation(fields: [userId], references: [id])
+  feeType     FeeType             @relation(fields: [feeTypeId], references: [id])
+  allocations PaymentAllocation[]
+
+  // Billing is idempotent: one invoice per member, fee and period.
+  @@unique([userId, feeTypeId, period])
+  @@index([status, dueDate])
+}
+
+model Payment {
+  id           Int           @id @default(autoincrement())
+  receiptNo    String        @unique // LWE-YYYYMMDD-XXXXXX
+  userId       Int
+  amount       Int // kobo received (for ACCOUNT_CREDIT: credit applied)
+  method       PaymentMethod
+  status       PaymentStatus @default(COMPLETED)
+  paidAt       DateTime
+  // Bank / POS / Paystack reference. Unique, so a reference can be applied once.
+  reference    String?       @unique
+  note         String?
+  recordedById Int?
+  reversedAt   DateTime?
+  reverseReason String?
+  createdAt    DateTime      @default(now())
+
+  user          User                @relation("PaymentMember", fields: [userId], references: [id])
+  recordedBy    User?               @relation("PaymentRecorder", fields: [recordedById], references: [id])
+  allocations   PaymentAllocation[]
+  creditEntries CreditEntry[]
+
+  @@index([userId, paidAt])
+  @@index([paidAt])
+}
+
+model PaymentAllocation {
+  id        Int     @id @default(autoincrement())
+  paymentId Int
+  invoiceId Int
+  amount    Int // kobo
+  payment   Payment @relation(fields: [paymentId], references: [id])
+  invoice   Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
+  @@index([paymentId])
+}
+
+model CreditEntry {
+  id        Int        @id @default(autoincrement())
+  userId    Int
+  amount    Int // kobo; positive adds credit, negative uses it
+  kind      CreditKind
+  paymentId Int?
+  note      String?
+  createdAt DateTime   @default(now())
+  user      User       @relation(fields: [userId], references: [id])
+  payment   Payment?   @relation(fields: [paymentId], references: [id])
+
+  @@index([userId])
+}
+
+model OnlinePayment {
+  id          Int                 @id @default(autoincrement())
+  reference   String              @unique
+  userId      Int
+  invoiceId   Int? // null = "pay everything outstanding"
+  amount      Int // kobo, set by the server
+  status      OnlinePaymentStatus @default(PENDING)
+  accessCode  String?
+  paymentId   Int?                @unique
+  failureNote String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  user        User                @relation(fields: [userId], references: [id])
+}
+
+model Expense {
+  id           Int      @id @default(autoincrement())
+  date         DateTime @db.Date
+  category     String
+  description  String
+  payee        String?
+  amount       Int // kobo
+  reference    String?
+  recordedById Int
+  createdAt    DateTime @default(now())
+  recordedBy   User     @relation(fields: [recordedById], references: [id])
+
+  @@index([date])
+}
+
+model Asset {
+  id           Int           @id @default(autoincrement())
+  name         String
+  category     AssetCategory
+  unit         String        @default("pcs")
+  quantity     Int           @default(0)
+  minQuantity  Int           @default(0) // low-stock alert threshold
+  location     String?
+  serialNumber String?
+  purchaseDate DateTime?     @db.Date
+  purchaseCost Int? // kobo
+  notes        String?
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  movements    StockMovement[]
+  maintenance  MaintenanceLog[]
+}
+
+model StockMovement {
+  id          Int               @id @default(autoincrement())
+  assetId     Int
+  type        StockMovementType
+  quantity    Int // signed change in quantity (0 for a pure relocation)
+  fromLocation String?
+  toLocation  String? // where it was deployed / moved to
+  note        String?
+  byId        Int
+  createdAt   DateTime          @default(now())
+  asset       Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  by          User              @relation(fields: [byId], references: [id])
+
+  @@index([assetId, createdAt])
+}
+
+model MaintenanceLog {
+  id          Int      @id @default(autoincrement())
+  assetId     Int
+  date        DateTime @db.Date
+  description String
+  cost        Int      @default(0) // kobo
+  performedBy String?
+  createdAt   DateTime @default(now())
+  asset       Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+}
+
+model Document {
+  id           Int      @id @default(autoincrement())
+  title        String
+  category     String
+  fileName     String   @unique // stored name on disk
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  uploadedById Int
+  createdAt    DateTime @default(now())
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+}
+
+model Announcement {
+  id          Int      @id @default(autoincrement())
+  title       String
+  body        String
+  audience    Audience
+  sendEmail   Boolean  @default(false)
+  sendSms     Boolean  @default(false)
+  recipients  Int      @default(0)
+  emailSent   Int      @default(0)
+  emailFailed Int      @default(0)
+  smsSent     Int      @default(0)
+  smsFailed   Int      @default(0)
+  sentById    Int
+  createdAt   DateTime @default(now())
+  sentBy      User     @relation(fields: [sentById], references: [id])
+  notifications Notification[]
+}
+
+// The in-app notification hub: one row per resident per message
+// (broadcasts, payment confirmations, request updates).
+model Notification {
+  id             Int           @id @default(autoincrement())
+  userId         Int
+  title          String
+  body           String
+  link           String?
+  announcementId Int?
+  readAt         DateTime?
+  createdAt      DateTime      @default(now())
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  announcement   Announcement? @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+model ServiceRequest {
+  id          Int           @id @default(autoincrement())
+  userId      Int
+  category    String // Security, Electricity, Water, Roads, Waste, Noise, Other
+  title       String
+  description String
+  status      RequestStatus @default(OPEN)
+  adminNote   String?
+  resolvedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  user        User          @relation(fields: [userId], references: [id])
+
+  @@index([status])
+}
+
+model VisitorPass {
+  id           Int               @id @default(autoincrement())
+  code         String // 6 digits, shown at the gate; unique among live passes (partial index in the migration)
+  hostId       Int
+  visitorName  String
+  visitorPhone String?
+  purpose      String?
+  vehiclePlate String?
+  validFrom    DateTime
+  validUntil   DateTime
+  status       VisitorPassStatus @default(ACTIVE)
+  checkedInAt  DateTime?
+  checkedOutAt DateTime?
+  guardId      Int?
+  createdAt    DateTime          @default(now())
+  host         User              @relation("PassHost", fields: [hostId], references: [id])
+  guard        User?             @relation("PassGuard", fields: [guardId], references: [id])
+
+  @@index([code])
+  @@index([hostId, createdAt])
+  @@index([validFrom])
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  actorId   Int?
+  action    String // e.g. resident.create, payment.reverse
+  entity    String
+  entityId  String?
+  details   Json?
+  ip        String?
+  createdAt DateTime @default(now())
+  actor     User?    @relation(fields: [actorId], references: [id])
+
+  @@index([createdAt])
+  @@index([entity, entityId])
+}
