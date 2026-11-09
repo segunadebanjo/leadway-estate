@@ -8,3 +8,4 @@ server/tests/uploads-test/
 *.log
 .DS_Store
 .neon
+local-data/

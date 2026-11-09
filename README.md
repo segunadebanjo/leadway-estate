@@ -9,7 +9,25 @@ server/   REST API, billing scheduler, Paystack webhook, Prisma schema + migrati
 client/   React single-page app (admin dashboard, resident portal, security gate)
 ```
 
-## Quick start (development)
+## Easiest way: run it on your own computer
+
+You need one thing installed: **Node.js** (the "LTS" version from https://nodejs.org). No database or Docker to install; a database is built in.
+
+1. Get the code: on GitHub click **Code → Download ZIP**, then unzip it (or `git clone` it).
+2. Double-click the start file in the folder:
+   * **Windows:** `Start Leadway Estate (Windows).bat`
+   * **Mac:** `Start Leadway Estate (Mac).command`. The first time, macOS may block it: right-click it, choose **Open**, then **Open** again.
+   * Or, in a terminal in the folder: `npm run local`
+3. The first time it downloads what it needs, which takes a few minutes and needs internet. It then asks if you want sample data to try things out, and opens the app in your browser at **http://localhost:4000**.
+4. Sign in with the details it shows. They are also saved in `local-data/FIRST-SIGN-IN.txt`. You'll choose your own password straight away.
+
+Keep the black window open while you use the app; close it (or press Ctrl+C) to stop. Next time, double-click again: it starts in seconds and everything you entered is still there.
+
+**Your data** lives in the `local-data` folder. To back it up, stop the app and copy that folder somewhere safe. Don't delete it unless you want to start again from empty.
+
+Other people on the same Wi-Fi can use it at `http://<this computer's IP address>:4000` while it's running. To put it on the internet, see "Deploying online" below.
+
+## Quick start for developers
 
 Prerequisites: Node 20+, PostgreSQL 14+ (or Docker).
 
