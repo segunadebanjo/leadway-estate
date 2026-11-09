@@ -313,8 +313,11 @@ model Document {
   id           Int      @id @default(autoincrement())
   title        String
   category     String
-  fileName     String   @unique // stored name on disk
+  fileName     String   @unique // unique stored name (on disk only for files uploaded before 0002)
   originalName String
+  // The file itself. Kept in the database so the app needs no persistent disk
+  // (free hosting plans have none) and documents are in every database backup.
+  content      Bytes?
   mimeType     String
   sizeBytes    Int
   uploadedById Int

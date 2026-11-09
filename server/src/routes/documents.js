@@ -11,7 +11,7 @@ import { parse, z, id, text } from '../lib/validate.js';
 import { requireAdmin, requireAuth } from '../middleware/auth.js';
 
 // Document centre: PDF / Word only, checked by content (magic bytes), not by
-// the name or the browser's claimed type. Stored on disk under UPLOAD_DIR.
+// the name or the browser's claimed type. Stored in the database (see Document.content).
 export const router = Router();
 
 export const DOC_CATEGORIES = ['Constitution & Bye-laws', 'Minutes', 'Financial Reports', 'Circulars', 'Forms', 'Other'];
@@ -49,16 +49,16 @@ router.get('/:id/download', requireAuth, async (req, res) => {
   const docId = parse(id, req.params.id);
   const doc = await prisma.document.findUnique({ where: { id: docId } });
   if (!doc) throw notFound('Document not found');
-  const file = path.join(config.uploadDir, doc.fileName);
-  try {
-    await fs.access(file);
-  } catch {
-    throw notFound('The file is missing from storage');
+  let body = doc.content ? Buffer.from(doc.content) : null;
+  if (!body) {
+    // Documents uploaded before files moved into the database live on disk.
+    body = await fs.readFile(path.join(config.uploadDir, doc.fileName)).catch(() => null);
+    if (!body) throw notFound('The file is missing from storage');
   }
   res.setHeader('Content-Type', doc.mimeType);
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Disposition', `attachment; filename="${doc.originalName.replace(/[^\w.\- ]/g, '_')}"`);
-  res.sendFile(file, { dotfiles: 'allow' });
+  res.send(body);
 });
 
 router.post('/', requireAdmin, (req, res, next) => {
@@ -71,11 +71,10 @@ router.post('/', requireAdmin, (req, res, next) => {
   if (!req.file) throw badRequest('Choose a file to upload');
   const type = detectDocType(req.file.originalname, req.file.buffer);
   if (!type) throw badRequest('Only PDF and Word documents (.pdf, .doc, .docx) are accepted, and the file must really be one');
-  await fs.mkdir(config.uploadDir, { recursive: true });
   const fileName = `${crypto.randomUUID()}.${type.ext}`;
-  await fs.writeFile(path.join(config.uploadDir, fileName), req.file.buffer, { flag: 'wx' });
   const doc = await prisma.document.create({
-    data: { title: body.title, category: body.category, fileName, originalName: path.basename(req.file.originalname).slice(0, 200), mimeType: type.mime, sizeBytes: req.file.size, uploadedById: req.user.id },
+    data: { title: body.title, category: body.category, fileName, originalName: path.basename(req.file.originalname).slice(0, 200), mimeType: type.mime, sizeBytes: req.file.size, content: req.file.buffer, uploadedById: req.user.id },
+    select: { id: true, title: true, category: true, originalName: true, mimeType: true, sizeBytes: true, createdAt: true },
   });
   await audit(req, 'document.upload', 'Document', doc.id, { title: doc.title, category: doc.category });
   res.status(201).json(doc);
@@ -83,7 +82,7 @@ router.post('/', requireAdmin, (req, res, next) => {
 
 router.delete('/:id', requireAdmin, async (req, res) => {
   const docId = parse(id, req.params.id);
-  const doc = await prisma.document.findUnique({ where: { id: docId } });
+  const doc = await prisma.document.findUnique({ where: { id: docId }, select: { id: true, title: true, fileName: true } });
   if (!doc) throw notFound('Document not found');
   await prisma.document.delete({ where: { id: docId } });
   await fs.rm(path.join(config.uploadDir, doc.fileName), { force: true });

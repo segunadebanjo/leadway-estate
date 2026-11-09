@@ -1,18 +1,13 @@
-# One-click deploy on Render: Dashboard → New → Blueprint → pick this repo.
-# Creates the web app (API + website on one URL), a PostgreSQL database and
-# a disk for uploaded documents. Values marked "sync: false" are asked for once.
-databases:
-  - name: leadway-db
-    databaseName: leadway_estate
-    user: leadway
-    plan: basic-256mb
-    region: frankfurt
-
+# Free deploy on Render: Dashboard → New → Blueprint → pick this repo.
+# Creates one free web service (website + API on one HTTPS address).
+# The database is a free Neon PostgreSQL (neon.tech): paste its connection
+# string as DATABASE_URL when Render asks. Uploaded documents are stored in
+# the database, so no disk is needed. Values marked "sync: false" are asked for once.
 services:
   - type: web
     name: leadway-estate
     runtime: node
-    plan: starter # the disk below needs a paid instance; free instances also sleep
+    plan: free
     region: frankfurt
     # --include=dev: the build needs Vite and the Prisma CLI even though NODE_ENV=production.
     buildCommand: >-
@@ -23,23 +18,15 @@ services:
       npm run db:seed
     startCommand: npm start
     healthCheckPath: /health
-    disk:
-      name: uploads
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
       - key: NODE_VERSION
         value: "22"
-      - key: DATABASE_URL
-        fromDatabase:
-          name: leadway-db
-          property: connectionString
+      - key: DATABASE_URL # Neon connection string (direct, not "pooled")
+        sync: false
       - key: JWT_SECRET
         generateValue: true
-      - key: UPLOAD_DIR
-        value: /var/data/uploads
       - key: APP_URL # e.g. https://leadway-estate.onrender.com or your own domain
         sync: false
       - key: SEED_ADMIN_EMAIL # the first executive's email

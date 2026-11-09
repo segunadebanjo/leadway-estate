@@ -1,5 +1,6 @@
 import { test, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { createUser, login, outbox, prisma, setup } from './helpers.js';
 
 let ctx;
@@ -27,6 +28,8 @@ test('documents: only real PDF/Word files are accepted, residents can download',
   assert.equal(dl.status, 200);
   assert.equal(dl.headers['content-type'], 'application/pdf');
   assert.ok(Buffer.from(dl.body).subarray(0, 5).equals(Buffer.from('%PDF-')));
+  assert.equal(fs.existsSync(process.env.UPLOAD_DIR), false, 'no disk needed: the file is stored in the database');
+  assert.equal(ok.body.content, undefined, 'file bytes are not echoed back');
   assert.equal((await resident.delete(`/api/documents/${ok.body.id}`)).status, 403);
   assert.equal((await ctx.adminAgent.delete(`/api/documents/${ok.body.id}`)).status, 200);
 });
