@@ -53,7 +53,7 @@ export default function Home() {
   );
 }
 
-function PayModal({ invoice, max, amount: suggested, onClose, onDone }) {
+export function PayModal({ invoice, max, amount: suggested, onClose, onDone }) {
   const [amount, setAmount] = useState(koboToInput(Math.min(suggested || max, max)));
   const { busy, error, run, setError } = useSubmit(async () => {
     const k = toKobo(amount);

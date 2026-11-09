@@ -301,3 +301,16 @@ textarea { min-height: 110px; resize: vertical; }
 .poll-bar-wrap { display: flex; align-items: center; gap: 10px; }
 .poll-bar { height: 12px; min-width: 2px; background: var(--brand); border-radius: 6px; flex: 0 0 auto; max-width: 75%; }
 .steps ul { margin: 4px 0; padding-left: 18px; }
+
+/* Printed statement letterhead */
+.print-only { display: none; }
+.statement-head h2 { color: var(--brand); margin: 0 0 4px; }
+@media print {
+  .print-only { display: block; margin-bottom: 12px; }
+}
+@media print {
+  .statement-card .card-head { display: none; }
+  body.print-statement .main * { visibility: hidden; }
+  body.print-statement .statement-card, body.print-statement .statement-card * { visibility: visible; }
+  body.print-statement .statement-card { position: absolute; top: 0; left: 0; right: 0; border: 0; }
+}

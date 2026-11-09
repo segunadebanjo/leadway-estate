@@ -11,6 +11,13 @@ const DEFAULTS = {
     email: true,
     sms: false,
   },
+  // Remembered from the last time debit notes were issued.
+  debitNotes: {
+    annualFeeTypeId: null,
+    monthlyFeeTypeId: null,
+    monthlyDue: 'UPFRONT',
+    message: '',
+  },
 };
 
 export async function getSetting(key) {

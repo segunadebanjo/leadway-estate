@@ -31,6 +31,7 @@ import Plans from './pages/admin/Plans.jsx';
 import Settings from './pages/admin/Settings.jsx';
 import Community from './pages/Community.jsx';
 import Household from './pages/Household.jsx';
+import { DebitNoteView, DebitNotesAdmin, MyDebitNotes } from './pages/DebitNotes.jsx';
 
 const NAV = {
   ADMIN: [
@@ -39,6 +40,7 @@ const NAV = {
     { section: 'Members & money' },
     { to: '/admin/residents', label: 'Residents' },
     { to: '/admin/receive-payment', label: 'Receive Payment' },
+    { to: '/admin/debit-notes', label: 'Debit notes' },
     { to: '/admin/ledger', label: 'Ledger' },
     { to: '/admin/expenses', label: 'Expenses' },
     { to: '/admin/reminders', label: 'Reminders' },
@@ -60,7 +62,8 @@ const NAV = {
   RESIDENT: [
     { to: '/', label: 'My account summary', end: true },
     { to: '/payments', label: 'Payments & receipts' },
-    { to: '/statement', label: 'Statement' },
+    { to: '/debit-notes', label: 'Debit notes' },
+    { to: '/statement', label: 'Statement of account' },
     { to: '/visitors', label: 'Visitor passes' },
     { to: '/household', label: 'My household' },
     { to: '/community', label: 'Polls & meetings' },
@@ -181,6 +184,7 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/payments" element={<MyPayments />} />
             <Route path="/statement" element={<Statement />} />
+            <Route path="/debit-notes" element={<MyDebitNotes />} />
             <Route path="/requests" element={<MyRequests />} />
             <Route path="/visitors" element={<MyVisitors />} />
             <Route path="/pay/callback" element={<PayCallback />} />
@@ -193,6 +197,7 @@ export default function App() {
 
           <Route element={<RequireAuth roles={['RESIDENT', 'ADMIN']} />}>
             <Route path="/community" element={<Community />} />
+            <Route path="/debit-notes/:id" element={<DebitNoteView />} />
           </Route>
 
           <Route element={<RequireAuth roles={['ADMIN']} />}>
@@ -201,6 +206,7 @@ export default function App() {
             <Route path="/admin/residents/:id" element={<ResidentDetail />} />
             <Route path="/admin/receive-payment" element={<ReceivePayment />} />
             <Route path="/admin/ledger" element={<Ledger />} />
+            <Route path="/admin/debit-notes" element={<DebitNotesAdmin />} />
             <Route path="/admin/expenses" element={<Expenses />} />
             <Route path="/admin/assets" element={<Assets />} />
             <Route path="/admin/reports" element={<Reports />} />

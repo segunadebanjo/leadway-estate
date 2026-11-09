@@ -21,6 +21,7 @@ import { router as assetRoutes } from './routes/assets.js';
 import { router as reportRoutes } from './routes/reports.js';
 import { router as reminderRoutes } from './routes/reminders.js';
 import { router as planRoutes } from './routes/plans.js';
+import { router as debitNoteRoutes } from './routes/debitNotes.js';
 import { router as householdRoutes } from './routes/household.js';
 import { router as communityRoutes } from './routes/community.js';
 
@@ -75,6 +76,7 @@ export function createApp() {
   api.use('/admin', requireAdmin, reminderRoutes);
   api.use('/admin', requireAdmin, adminRoutes);
   api.use('/plans', requireAdmin, planRoutes);
+  api.use('/debit-notes', debitNoteRoutes); // each route guards itself
   api.use('/household', householdRoutes);
   api.use('/community', communityRoutes);
   api.use('/broadcasts', requireAdmin, broadcastRoutes);

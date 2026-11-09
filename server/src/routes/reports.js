@@ -189,14 +189,15 @@ export async function memberStatement(userId, from, to) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, membershipId: true, firstName: true, lastName: true, plotNumber: true, street: true, email: true, phone: true, creditBalance: true } });
   if (!user) throw notFound('Member not found');
   const [invoices, payments, adjustments] = await Promise.all([
-    prisma.invoice.findMany({ where: { userId, status: { not: 'VOID' } }, select: { id: true, description: true, amount: true, createdAt: true, dueDate: true } }),
+    prisma.invoice.findMany({ where: { userId, status: { not: 'VOID' } }, select: { id: true, description: true, amount: true, createdAt: true, dueDate: true, debitNote: { select: { id: true, noteNo: true, year: true, issueDate: true } } } }),
     prisma.payment.findMany({ where: { userId, ...CASH }, select: { id: true, receiptNo: true, amount: true, paidAt: true, method: true, reference: true } }),
     prisma.creditEntry.findMany({ where: { userId, kind: 'ADJUSTMENT' } }),
   ]);
   // Debits: bills. Credits: money received and executive credit adjustments.
   // Closing balance = outstanding − credit held (negative means in credit).
   const entries = [
-    ...invoices.map((i) => ({ date: todayIso(i.createdAt), sort: i.createdAt.getTime(), type: 'Bill', description: i.description, ref: `INV-${i.id}`, debit: i.amount, credit: 0 })),
+    ...invoices.filter((i) => !i.debitNote).map((i) => ({ date: todayIso(i.createdAt), sort: i.createdAt.getTime(), type: 'Bill', description: i.description, ref: `INV-${i.id}`, debit: i.amount, credit: 0 })),
+    ...debitNoteEntries(invoices.filter((i) => i.debitNote)),
     ...payments.map((p) => ({ date: todayIso(p.paidAt), sort: p.paidAt.getTime(), type: 'Payment', description: `${METHOD[p.method] || p.method}${p.reference ? ` (${p.reference})` : ''}`, ref: p.receiptNo, debit: 0, credit: p.amount, paymentId: p.id })),
     ...adjustments.map((c) => ({ date: todayIso(c.createdAt), sort: c.createdAt.getTime(), type: 'Adjustment', description: c.note || 'Credit adjustment', ref: `ADJ-${c.id}`, debit: c.amount < 0 ? -c.amount : 0, credit: c.amount > 0 ? c.amount : 0 })),
   ].sort((a, b) => a.sort - b.sort);
@@ -215,6 +216,21 @@ export async function memberStatement(userId, from, to) {
   }
   const closing = rows.length ? rows[rows.length - 1].balance : opening;
   return { user, from: from || null, to: to || null, opening, closing, rows, totals: { debit: rows.reduce((s, r) => s + r.debit, 0), credit: rows.reduce((s, r) => s + r.credit, 0) } };
+}
+
+// A debit note is one line on the statement: its number, what it covers and its total.
+function debitNoteEntries(lines) {
+  const notes = new Map();
+  for (const i of [...lines].sort((a, b) => a.id - b.id)) {
+    const n = notes.get(i.debitNote.id) || { note: i.debitNote, amount: 0, items: [] };
+    n.amount += i.amount;
+    n.items.push(i.description.replace(/ – .*$/, ''));
+    notes.set(i.debitNote.id, n);
+  }
+  return [...notes.values()].map(({ note, amount, items }) => {
+    const kinds = [...new Set(items)].map((k) => (items.filter((x) => x === k).length > 1 ? `${k} × ${items.filter((x) => x === k).length} months` : k));
+    return { date: toIso(note.issueDate), sort: note.issueDate.getTime(), type: 'Debit note', description: `${note.year}: ${kinds.join(', ')}`, ref: note.noteNo, debit: amount, credit: 0, debitNoteId: note.id };
+  });
 }
 
 router.get('/statement', async (req, res) => {

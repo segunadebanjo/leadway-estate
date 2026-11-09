@@ -60,6 +60,14 @@ Email (sign-in details, "Forgot password", receipts, reminders) needs an email s
 
 On your own server any SMTP account works instead (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`).
 
+## Billing members for the year (debit notes)
+
+1. Under **Ledger → Fee types**, check the **annual due** amount and add a **Security Fee** (frequency *Monthly*) if it is not there.
+2. Open **Debit notes → Issue debit notes**. Pick the year, the annual due and the security fee (amounts can be changed for this year only), the months (January to December), the date on the note and the pay-by date, and type the estate bank details to print on the note.
+3. Click **Check before issuing** to see each member's total, then **Issue**. Members get a notice (and an email if email is set up).
+
+Every payment is taken off the member's oldest bills first, so it nets off the debit note with no extra steps. A new member joining mid-year can be given their own note from their member page (**Issue debit note**, starting from the month they join). The monthly billing never charges a month that is already on a debit note.
+
 ## Getting updates (after changes are made)
 
 Your data lives in the `local-data` folder, so updating the program never touches it.
@@ -117,6 +125,8 @@ Roles are re-read from the database on every request, so deactivation, role chan
 | **Visitor gate passes** *(new)* | Resident issues a 6-digit one-time code (optionally texted to the visitor) valid for a set window; security verifies, checks in (once only) and out; the resident is notified on arrival |
 | **Bank statement upload** | *Receive Payment → Upload bank statement*: the estate account statement from internet banking (Excel/CSV) as it is. Money-in lines are matched to members by a Membership ID column, "LWE 12" in the narration, phone number or name, then received exactly like a manual payment. A bank reference is used once, so re-uploading never double-counts |
 | **Reminders** | List of everyone with overdue bills; send a reminder now by app notice, email and SMS; or switch on **weekly automatic reminders** (day, minimum days overdue, minimum amount). Nobody is reminded more than once a week; members keeping up with a payment plan are skipped |
+| **Debit notes (annual billing)** | Once a year, one debit note per member: the annual due plus the security fee for January to December (or from a later month for new members), due all at once or month by month. Each line is an ordinary bill, so every payment (cash, transfer, POS, online, bank-statement upload, account credit) nets off the note automatically. Printable note with payments taken off and balance due; issue to everyone or one member; check before issuing; never bills twice; cancel and re-issue if nothing is paid |
+| **Statement of account** | Per member, with opening balance, running balance, debit notes as one line each, and Print / PDF and CSV. Members see their own; executives see it on the member's page and under Reports |
 | **Payment plans** | Spread a member's debt over 2–24 monthly instalments. The plan is measured against cash paid since it was agreed (bills still settle oldest first), shows each instalment as paid / part paid / overdue, completes itself when paid, and appears on the member's home page |
 | **Meetings & polls** | Polls for all residents, owners or tenants: one vote per member, results shown when voting closes. Meetings with agenda and notice to residents, and an attendance register (with proxies), turnout and CSV download |
 | **Household & vehicles** | Residents list the people who live with them and their cars (*My household*); executives see and edit them on the member's page. The gate's **Check a car or person** finds who a plate or name belongs to |

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../api.js';
 import { Badge, Card, ErrorNote, Field, Loading, Modal, Money, PageHeader, Stat, Table, Tabs, useFetch, useSubmit } from '../../components/ui.jsx';
 import { METHOD, date, dateTime, humanize, naira, toKobo } from '../../format.js';
@@ -7,10 +7,12 @@ import { CredentialsNote, MemberForm } from './Residents.jsx';
 import { StatementView } from '../resident/Statement.jsx';
 import { HouseholdPanel } from '../Household.jsx';
 import { PlanForm, PlanModal, PlanTable } from './Plans.jsx';
+import { IssueDebitNotes, NoteStatus } from '../DebitNotes.jsx';
 
 export default function ResidentDetail() {
   const { id } = useParams();
   const { data, error, reload } = useFetch(`/api/residents/${id}`);
+  const nav = useNavigate();
   const [tab, setTab] = useState('invoices');
   const [editing, setEditing] = useState(false);
   const [creds, setCreds] = useState(null);
@@ -19,6 +21,8 @@ export default function ResidentDetail() {
   const [planning, setPlanning] = useState(false);
   const [openPlan, setOpenPlan] = useState(null);
   const plans = useFetch(`/api/plans?status=ALL&userId=${id}`);
+  const notes = useFetch(`/api/debit-notes?userId=${id}`);
+  const [issuing, setIssuing] = useState(false);
   if (error) return <ErrorNote error={error} />;
   if (!data) return <Loading />;
   const { user: u, balance: b } = data;
@@ -51,6 +55,7 @@ export default function ResidentDetail() {
             {u.role === 'RESIDENT' && u.isActive && <Link className="btn" to={`/admin/receive-payment?member=${u.id}`}>Receive payment</Link>}
             <button className="btn btn-ghost" onClick={() => setEditing(true)}>Edit</button>
             <button className="btn btn-ghost" onClick={resetPw}>Reset password</button>
+            {u.role === 'RESIDENT' && u.isActive && <button className="btn btn-ghost" onClick={() => setIssuing(true)}>Issue debit note</button>}
             {u.role === 'RESIDENT' && <button className="btn btn-ghost" onClick={() => setAdjusting(true)}>Adjust credit</button>}
             {u.role === 'RESIDENT' && b.outstanding > 0 && !plans.data?.rows.some((p) => p.status === 'ACTIVE') && <button className="btn btn-ghost" onClick={() => setPlanning(true)}>Payment plan</button>}
             <button className={`btn ${u.isActive ? 'btn-danger' : ''}`} onClick={toggleActive}>{u.isActive ? 'Deactivate' : 'Reactivate'}</button>
@@ -74,9 +79,24 @@ export default function ResidentDetail() {
           {u.mustChangePassword && (<><dt>Sign-in</dt><dd><Badge status="PENDING" label="Has not set a password yet" /></dd></>)}
         </dl>
       </Card>
-      <Tabs active={tab} onChange={setTab} tabs={[{ key: 'invoices', label: `Invoices (${data.invoices.length})` }, { key: 'payments', label: `Payments (${data.payments.length})` }, { key: 'statement', label: 'Statement' }, { key: 'credit', label: 'Credit history' }, ...(u.role === 'RESIDENT' ? [{ key: 'plans', label: `Payment plans (${plans.data?.rows.length ?? 0})` }, { key: 'household', label: 'Household & vehicles' }] : [])]} />
+      <Tabs active={tab} onChange={setTab} tabs={[{ key: 'invoices', label: `Invoices (${data.invoices.length})` }, { key: 'payments', label: `Payments (${data.payments.length})` }, ...(u.role === 'RESIDENT' ? [{ key: 'notes', label: `Debit notes (${notes.data?.rows.length ?? 0})` }] : []), { key: 'statement', label: 'Statement of account' }, { key: 'credit', label: 'Credit history' }, ...(u.role === 'RESIDENT' ? [{ key: 'plans', label: `Payment plans (${plans.data?.rows.length ?? 0})` }, { key: 'household', label: 'Household & vehicles' }] : [])]} />
       {tab === 'plans' && <Card>{!plans.data ? <Loading /> : <PlanTable rows={plans.data.rows} hideMember onOpen={setOpenPlan} />}</Card>}
       {tab === 'household' && <HouseholdPanel userId={u.id} />}
+      {tab === 'notes' && (
+        <Card>
+          {!notes.data ? <Loading /> : (
+            <Table rows={notes.data.rows} onRowClick={(n) => nav(`/debit-notes/${n.id}`)} empty="No debit notes yet. Use “Issue debit note” to bill this member for the year." columns={[
+              { key: 'noteNo', label: 'Debit note', render: (n) => <Link to={`/debit-notes/${n.id}`}>{n.noteNo}</Link> },
+              { key: 'year', label: 'Year' },
+              { key: 'dueDate', label: 'Pay by', render: (n) => date(n.dueDate) },
+              { key: 'status', label: 'Status', render: (n) => <NoteStatus n={n} /> },
+              { key: 'amount', label: 'Amount', align: 'right', render: (n) => <Money v={n.amount} /> },
+              { key: 'balance', label: 'Balance', align: 'right', render: (n) => (n.status === 'VOID' ? '—' : <Money v={n.balance} />) },
+            ]} />
+          )}
+        </Card>
+      )}
+      {issuing && <IssueDebitNotes member={u} onClose={() => setIssuing(false)} onDone={() => { setIssuing(false); setTab('notes'); notes.reload(); reload(); }} />}
       {planning && <PlanForm member={u} onClose={() => setPlanning(false)} onSaved={() => { setPlanning(false); setTab('plans'); plans.reload(); reload(); }} />}
       {openPlan && <PlanModal plan={plans.data?.rows.find((p) => p.id === openPlan)} onClose={() => setOpenPlan(null)} onChanged={() => { setOpenPlan(null); plans.reload(); }} />}
       {tab === 'invoices' && (

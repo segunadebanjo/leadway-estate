@@ -115,8 +115,8 @@ model User {
   updatedAt          DateTime      @updatedAt
 
   invoices         Invoice[]
-  payments         Payment[]          @relation("PaymentMember")
-  recordedPayments Payment[]          @relation("PaymentRecorder")
+  payments         Payment[]            @relation("PaymentMember")
+  recordedPayments Payment[]            @relation("PaymentRecorder")
   creditEntries    CreditEntry[]
   onlinePayments   OnlinePayment[]
   notifications    Notification[]
@@ -124,8 +124,8 @@ model User {
   documents        Document[]
   stockMovements   StockMovement[]
   serviceRequests  ServiceRequest[]
-  visitorPasses    VisitorPass[]      @relation("PassHost")
-  gateCheckIns     VisitorPass[]      @relation("PassGuard")
+  visitorPasses    VisitorPass[]        @relation("PassHost")
+  gateCheckIns     VisitorPass[]        @relation("PassGuard")
   expenses         Expense[]
   auditLogs        AuditLog[]
   resetTokens      PasswordResetToken[]
@@ -135,6 +135,8 @@ model User {
   vehicles         Vehicle[]
   pollVotes        PollVote[]
   attendance       MeetingAttendance[]
+  debitNotes       DebitNote[]          @relation("DebitNoteMember")
+  issuedDebitNotes DebitNote[]          @relation("DebitNoteIssuer")
 
   @@index([lastName, firstName])
   @@index([plotNumber])
@@ -175,33 +177,37 @@ model Invoice {
   dueDate     DateTime      @db.Date
   status      InvoiceStatus @default(UNPAID)
   voidReason  String?
+  // The debit note this bill is a line of (annual billing), if any.
+  debitNoteId Int?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
   user        User                @relation(fields: [userId], references: [id])
   feeType     FeeType             @relation(fields: [feeTypeId], references: [id])
+  debitNote   DebitNote?          @relation(fields: [debitNoteId], references: [id])
   allocations PaymentAllocation[]
 
   // Billing is idempotent: one invoice per member, fee and period.
   @@unique([userId, feeTypeId, period])
   @@index([status, dueDate])
+  @@index([debitNoteId])
 }
 
 model Payment {
-  id           Int           @id @default(autoincrement())
-  receiptNo    String        @unique // LWE-YYYYMMDD-XXXXXX
-  userId       Int
-  amount       Int // kobo received (for ACCOUNT_CREDIT: credit applied)
-  method       PaymentMethod
-  status       PaymentStatus @default(COMPLETED)
-  paidAt       DateTime
+  id            Int           @id @default(autoincrement())
+  receiptNo     String        @unique // LWE-YYYYMMDD-XXXXXX
+  userId        Int
+  amount        Int // kobo received (for ACCOUNT_CREDIT: credit applied)
+  method        PaymentMethod
+  status        PaymentStatus @default(COMPLETED)
+  paidAt        DateTime
   // Bank / POS / Paystack reference. Unique, so a reference can be applied once.
-  reference    String?       @unique
-  note         String?
-  recordedById Int?
-  reversedAt   DateTime?
+  reference     String?       @unique
+  note          String?
+  recordedById  Int?
+  reversedAt    DateTime?
   reverseReason String?
-  createdAt    DateTime      @default(now())
+  createdAt     DateTime      @default(now())
 
   user          User                @relation("PaymentMember", fields: [userId], references: [id])
   recordedBy    User?               @relation("PaymentRecorder", fields: [recordedById], references: [id])
@@ -284,22 +290,22 @@ model Asset {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  movements    StockMovement[]
-  maintenance  MaintenanceLog[]
+  movements   StockMovement[]
+  maintenance MaintenanceLog[]
 }
 
 model StockMovement {
-  id          Int               @id @default(autoincrement())
-  assetId     Int
-  type        StockMovementType
-  quantity    Int // signed change in quantity (0 for a pure relocation)
+  id           Int               @id @default(autoincrement())
+  assetId      Int
+  type         StockMovementType
+  quantity     Int // signed change in quantity (0 for a pure relocation)
   fromLocation String?
-  toLocation  String? // where it was deployed / moved to
-  note        String?
-  byId        Int
-  createdAt   DateTime          @default(now())
-  asset       Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  by          User              @relation(fields: [byId], references: [id])
+  toLocation   String? // where it was deployed / moved to
+  note         String?
+  byId         Int
+  createdAt    DateTime          @default(now())
+  asset        Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  by           User              @relation(fields: [byId], references: [id])
 
   @@index([assetId, createdAt])
 }
@@ -332,20 +338,20 @@ model Document {
 }
 
 model Announcement {
-  id          Int      @id @default(autoincrement())
-  title       String
-  body        String
-  audience    Audience
-  sendEmail   Boolean  @default(false)
-  sendSms     Boolean  @default(false)
-  recipients  Int      @default(0)
-  emailSent   Int      @default(0)
-  emailFailed Int      @default(0)
-  smsSent     Int      @default(0)
-  smsFailed   Int      @default(0)
-  sentById    Int
-  createdAt   DateTime @default(now())
-  sentBy      User     @relation(fields: [sentById], references: [id])
+  id            Int            @id @default(autoincrement())
+  title         String
+  body          String
+  audience      Audience
+  sendEmail     Boolean        @default(false)
+  sendSms       Boolean        @default(false)
+  recipients    Int            @default(0)
+  emailSent     Int            @default(0)
+  emailFailed   Int            @default(0)
+  smsSent       Int            @default(0)
+  smsFailed     Int            @default(0)
+  sentById      Int
+  createdAt     DateTime       @default(now())
+  sentBy        User           @relation(fields: [sentById], references: [id])
   notifications Notification[]
 }
 
@@ -548,4 +554,33 @@ model MeetingAttendance {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([meetingId, userId])
+}
+
+enum DebitNoteStatus {
+  ISSUED
+  VOID
+}
+
+// One member's bill for a year (e.g. the annual due plus security fee January
+// to December). Each line is an ordinary Invoice, so every payment settles
+// the lines exactly as it settles any other bill.
+model DebitNote {
+  id          Int             @id @default(autoincrement())
+  noteNo      String          @unique // DN-2027-0001
+  userId      Int
+  year        Int
+  issueDate   DateTime        @db.Date
+  dueDate     DateTime        @db.Date
+  message     String? // payment instructions printed on the note
+  status      DebitNoteStatus @default(ISSUED)
+  voidReason  String?
+  createdById Int?
+  createdAt   DateTime        @default(now())
+
+  user      User      @relation("DebitNoteMember", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation("DebitNoteIssuer", fields: [createdById], references: [id], onDelete: SetNull)
+  invoices  Invoice[]
+
+  @@index([userId])
+  @@index([year])
 }
