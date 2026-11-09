@@ -31,12 +31,12 @@ async function main() {
       lastName: 'Administrator',
       role: 'ADMIN',
       passwordHash: await bcrypt.hash(password, 12),
-      mustChangePassword: !process.env.SEED_ADMIN_PASSWORD,
+      mustChangePassword: true, // a seeded password is always temporary
     },
   });
-  console.log('\nFirst admin created – this password is shown once:');
+  console.log('\nFirst admin created (password must be changed at first sign-in):');
   console.log(`  Email:    ${email}`);
-  console.log(`  Password: ${password}`);
+  if (!process.env.SEED_ADMIN_PASSWORD) console.log(`  Password: ${password}`);
   console.log(`  ID:       ${admin.membershipId}\n`);
 }
 

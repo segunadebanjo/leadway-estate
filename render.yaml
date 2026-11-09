@@ -1,0 +1,66 @@
+# One-click deploy on Render: Dashboard → New → Blueprint → pick this repo.
+# Creates the web app (API + website on one URL), a PostgreSQL database and
+# a disk for uploaded documents. Values marked "sync: false" are asked for once.
+databases:
+  - name: leadway-db
+    databaseName: leadway_estate
+    user: leadway
+    plan: basic-256mb
+    region: frankfurt
+
+services:
+  - type: web
+    name: leadway-estate
+    runtime: node
+    plan: starter # the disk below needs a paid instance; free instances also sleep
+    region: frankfurt
+    # --include=dev: the build needs Vite and the Prisma CLI even though NODE_ENV=production.
+    buildCommand: >-
+      npm --prefix server ci --include=dev &&
+      npm --prefix client ci --include=dev &&
+      npm run build &&
+      npm run db:migrate &&
+      npm run db:seed
+    startCommand: npm start
+    healthCheckPath: /health
+    disk:
+      name: uploads
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: leadway-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      - key: APP_URL # e.g. https://leadway-estate.onrender.com or your own domain
+        sync: false
+      - key: SEED_ADMIN_EMAIL # the first executive's email
+        sync: false
+      - key: SEED_ADMIN_PASSWORD # temporary; changed at first sign-in. Delete it afterwards.
+        sync: false
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: PAYSTACK_PUBLIC_KEY
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: TERMII_API_KEY
+        sync: false
+      - key: TERMII_SENDER_ID
+        value: Leadway

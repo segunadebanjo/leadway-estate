@@ -81,7 +81,24 @@ Roles are re-read from the database on every request, so deactivation, role chan
 * Uploads are checked by magic bytes, stored under random names, and served as attachments with `nosniff`.
 * Helmet sets a CSP that allows only Paystack's script and checkout frames.
 
-## Production deployment
+## Deploying online (Render, one click)
+
+`render.yaml` describes the whole setup: one web service that serves the API and the website on a single HTTPS address, a PostgreSQL database, and a 1 GB disk for uploaded documents. Region: Frankfurt (the closest to Nigeria).
+
+1. Sign up at render.com with your GitHub account and allow it to see `leadway-estate`.
+2. **New → Blueprint**, pick this repo, then **Apply**. Render asks once for the values marked `sync: false`:
+   * `APP_URL`: enter `https://leadway-estate.onrender.com` for now (or your own domain, see step 5).
+   * `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`: the first executive's sign-in. The password is temporary and must be changed at first sign-in.
+   * Paystack, SMTP and Termii keys. Any of these can be left blank and added later under the service's **Environment** tab.
+   * `JWT_SECRET` and `DATABASE_URL` are filled in automatically.
+3. Each deploy builds the client, applies migrations, and creates the first admin if there isn't one (it never overwrites one). Open the URL and sign in.
+4. Once you've signed in and changed the password, delete `SEED_ADMIN_PASSWORD` from the Environment tab.
+5. **Optional, your own domain:** Settings → Custom Domains → add e.g. `portal.leadwayestate.ng`, then add the DNS record Render shows you at your domain registrar. HTTPS is issued automatically. Update `APP_URL` to match.
+6. **Paystack:** in the Paystack dashboard set the webhook URL to `<APP_URL>/api/payments/webhook`.
+
+Pushing to `main` redeploys automatically. Paid plans are needed for the disk, so the web service doesn't sleep and the nightly billing runs on time; check Render's pricing page for current costs. Render backs up paid PostgreSQL databases daily. Documents live on the disk, so download important ones occasionally or move storage to S3/R2.
+
+## Production deployment (your own server)
 
 ```bash
 npm run install:all && npm run build   # builds client/dist
