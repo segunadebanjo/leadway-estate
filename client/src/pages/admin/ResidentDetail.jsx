@@ -8,6 +8,7 @@ import { StatementView } from '../resident/Statement.jsx';
 import { HouseholdPanel } from '../Household.jsx';
 import { PlanForm, PlanModal, PlanTable } from './Plans.jsx';
 import { IssueDebitNotes, NoteStatus } from '../DebitNotes.jsx';
+import { CorrectPaymentModal, ReverseBillModal } from '../../components/Corrections.jsx';
 
 export default function ResidentDetail() {
   const { id } = useParams();
@@ -23,6 +24,8 @@ export default function ResidentDetail() {
   const plans = useFetch(`/api/plans?status=ALL&userId=${id}`);
   const notes = useFetch(`/api/debit-notes?userId=${id}`);
   const [issuing, setIssuing] = useState(false);
+  const [fixBill, setFixBill] = useState(null);
+  const [fixPayment, setFixPayment] = useState(null);
   if (error) return <ErrorNote error={error} />;
   if (!data) return <Loading />;
   const { user: u, balance: b } = data;
@@ -96,6 +99,8 @@ export default function ResidentDetail() {
           )}
         </Card>
       )}
+      {fixBill && <ReverseBillModal bill={fixBill} onClose={() => setFixBill(null)} onDone={() => { setFixBill(null); reload(); notes.reload(); }} />}
+      {fixPayment && <CorrectPaymentModal paymentId={fixPayment} onClose={() => setFixPayment(null)} onDone={() => { setFixPayment(null); reload(); notes.reload(); }} />}
       {issuing && <IssueDebitNotes member={u} onClose={() => setIssuing(false)} onDone={() => { setIssuing(false); setTab('notes'); notes.reload(); reload(); }} />}
       {planning && <PlanForm member={u} onClose={() => setPlanning(false)} onSaved={() => { setPlanning(false); setTab('plans'); plans.reload(); reload(); }} />}
       {openPlan && <PlanModal plan={plans.data?.rows.find((p) => p.id === openPlan)} onClose={() => setOpenPlan(null)} onChanged={() => { setOpenPlan(null); plans.reload(); }} />}
@@ -108,9 +113,7 @@ export default function ResidentDetail() {
             { key: 'amount', label: 'Amount', align: 'right', render: (i) => <Money v={i.amount} /> },
             { key: 'paid', label: 'Paid', align: 'right', render: (i) => <Money v={i.amountPaid} /> },
             { key: 'balance', label: 'Balance', align: 'right', render: (i) => i.status === 'VOID' ? '—' : <Money v={i.amount - i.amountPaid} /> },
-            { key: 'act', label: '', align: 'right', render: (i) => i.status === 'UNPAID' && i.amountPaid === 0 && (
-              <button className="btn btn-ghost btn-small" onClick={() => act(async () => { const reason = prompt('Reason for voiding this invoice?'); if (reason) await api.post(`/api/ledger/invoices/${i.id}/void`, { reason }); })}>Void</button>
-            ) },
+            { key: 'act', label: '', align: 'right', render: (i) => i.status !== 'VOID' && <button className="btn btn-ghost btn-small" onClick={() => setFixBill(i)}>Reverse / lower</button> },
           ]} />
         </Card>
       )}
@@ -123,9 +126,7 @@ export default function ResidentDetail() {
             { key: 'reference', label: 'Reference' },
             { key: 'status', label: 'Status', render: (p) => <Badge status={p.status} /> },
             { key: 'amount', label: 'Amount', align: 'right', render: (p) => <Money v={p.amount} /> },
-            { key: 'act', label: '', align: 'right', render: (p) => p.status === 'COMPLETED' && p.method !== 'PAYSTACK' && (
-              <button className="btn btn-ghost btn-small" onClick={() => act(async () => { const reason = prompt(`Reverse receipt ${p.receiptNo} (${naira(p.amount)})? Give a reason:`); if (reason) await api.post(`/api/payments/${p.id}/reverse`, { reason }); })}>Reverse</button>
-            ) },
+            { key: 'act', label: '', align: 'right', render: (p) => p.status === 'COMPLETED' && <button className="btn btn-ghost btn-small" onClick={() => setFixPayment(p.id)}>Correct</button> },
           ]} />
         </Card>
       )}

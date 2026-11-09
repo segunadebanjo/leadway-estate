@@ -43,7 +43,7 @@ export function StatementView({ url, csvUrl, showMember }) {
         { key: 'description', label: 'Description' },
         { key: 'ref', label: 'Reference', render: (r) => (r.ref === 'opening' ? '' : r.debitNoteId ? <Link to={`/debit-notes/${r.debitNoteId}`}>{r.ref}</Link> : r.paymentId ? <Link to={`/receipts/${r.paymentId}`}>{r.ref}</Link> : r.ref) },
         { key: 'debit', label: 'Charges', align: 'right', render: (r) => (r.debit ? <Money v={r.debit} /> : '') },
-        { key: 'credit', label: 'Payments', align: 'right', render: (r) => (r.credit ? <Money v={r.credit} /> : '') },
+        { key: 'credit', label: 'Payments & credits', align: 'right', render: (r) => (r.credit ? <Money v={r.credit} /> : '') },
         { key: 'balance', label: 'Balance', align: 'right', render: (r) => <span className="num">{balanceText(r.balance)}</span> },
       ]} footer={<tr><td colSpan={4}>Totals for the period</td><td className="right"><Money v={data.totals.debit} /></td><td className="right"><Money v={data.totals.credit} /></td><td /></tr>} />
     </Card>

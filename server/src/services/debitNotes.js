@@ -4,7 +4,7 @@ import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { dateOnly, isoDate, monthName, toIso, todayIso } from '../lib/dates.js';
 import { formatNaira, invoiceBalance, sum } from '../lib/money.js';
 import { runLimited, sendEmail } from '../lib/messaging.js';
-import { applyCredit } from './ledger.js';
+import { applyCredit, reduceBillTx } from './ledger.js';
 
 // Annual debit notes: one per member per year, e.g. the annual due plus the
 // security fee for January to December. Each line is an ordinary Invoice
@@ -257,25 +257,26 @@ export async function getNote(id) {
   return { ...summarise(note), receipts: [...receipts.values()].sort((a, b) => a.paidAt - b.paidAt), estate: { name: config.estateName, address: config.estateAddress } };
 }
 
-// ---- Voiding -----------------------------------------------------------------
+// ---- Reversing --------------------------------------------------------------
 
 /**
- * Cancel a note issued by mistake. Refused once anything has been paid on it.
- * Its lines are voided and their period freed, so the note can be issued again.
+ * Reverse a note issued in error. Each line is reversed (and its month freed,
+ * so the note can be issued again); money already paid on it is kept as the
+ * member's credit and used on their other open bills, oldest first.
  */
-export async function voidNote(id, reason) {
+export async function voidNote(id, reason, actorId = null) {
   return transaction(async (tx) => {
     const head = await tx.debitNote.findUnique({ where: { id }, select: { userId: true } });
     if (!head) throw notFound('Debit note not found');
     await lockMember(tx, head.userId);
     const note = await tx.debitNote.findUniqueOrThrow({ where: { id }, include: { invoices: true } });
-    if (note.status === 'VOID') throw conflict('This debit note is already cancelled');
-    if (note.invoices.some((i) => i.status !== 'VOID' && i.amountPaid > 0)) {
-      throw conflict('Payments have already been taken off this debit note. Reverse those receipts first (member page → Payments), then cancel it.');
-    }
+    if (note.status === 'VOID') throw conflict('This debit note is already reversed');
+    let released = 0;
     for (const inv of note.invoices.filter((i) => i.status !== 'VOID')) {
-      await tx.invoice.update({ where: { id: inv.id }, data: { status: 'VOID', period: null, voidReason: `Debit note ${note.noteNo} cancelled: ${reason}` } });
+      released += (await reduceBillTx(tx, inv.id, 0, `Debit note ${note.noteNo} reversed: ${reason}`, actorId)).released;
     }
-    return tx.debitNote.update({ where: { id }, data: { status: 'VOID', voidReason: reason } });
+    if (released) await applyCredit(tx, note.userId, actorId);
+    const updated = await tx.debitNote.update({ where: { id }, data: { status: 'VOID', voidReason: reason } });
+    return { ...updated, released };
   });
 }

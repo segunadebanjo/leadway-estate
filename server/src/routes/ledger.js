@@ -5,6 +5,8 @@ import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { dateOnly, todayIso } from '../lib/dates.js';
 import { parse, paging, pageQuery, z, id, kobo, text, optionalText, isoDate } from '../lib/validate.js';
 import { createInvoice, runBilling } from '../services/billing.js';
+import { reduceBill } from '../services/ledger.js';
+import { MAX_AMOUNT } from '../lib/money.js';
 import { memberSearch } from './residents.js';
 
 // Admin: fee types, invoices, billing.
@@ -78,7 +80,7 @@ router.get('/invoices', async (req, res) => {
     prisma.invoice.findMany({
       where,
       orderBy: [{ dueDate: 'desc' }, { id: 'desc' }],
-      include: { user: { select: { id: true, membershipId: true, firstName: true, lastName: true, plotNumber: true } }, feeType: { select: { name: true } } },
+      include: { user: { select: { id: true, membershipId: true, firstName: true, lastName: true, plotNumber: true } }, feeType: { select: { name: true } }, debitNote: { select: { id: true, noteNo: true } } },
       ...paging(q),
     }),
     prisma.invoice.aggregate({ where, _sum: { amount: true, amountPaid: true } }),
@@ -141,6 +143,16 @@ router.post('/invoices/:id/void', async (req, res) => {
   }
   await audit(req, 'invoice.void', 'Invoice', invId, body);
   res.json(await prisma.invoice.findUnique({ where: { id: invId } }));
+});
+
+// Reverse a bill raised in error (newAmount 0), or lower it. Money already paid
+// on it is kept as the member's credit and used on their other open bills.
+router.post('/invoices/:id/reverse', async (req, res) => {
+  const invId = parse(id, req.params.id);
+  const body = parse(z.object({ newAmount: z.number().int().min(0).max(MAX_AMOUNT).default(0), reason: text(300) }), req.body);
+  const r = await reduceBill(invId, body.newAmount, body.reason, req.user.id);
+  await audit(req, body.newAmount === 0 ? 'invoice.reverse' : 'invoice.reduce', 'Invoice', invId, { description: r.description, from: r.from, to: r.to, paidMovedToCredit: r.released, reason: body.reason });
+  res.json(r);
 });
 
 // ---- Billing ---------------------------------------------------------------

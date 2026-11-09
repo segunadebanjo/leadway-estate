@@ -137,6 +137,8 @@ model User {
   attendance       MeetingAttendance[]
   debitNotes       DebitNote[]          @relation("DebitNoteMember")
   issuedDebitNotes DebitNote[]          @relation("DebitNoteIssuer")
+  billAdjustments  BillAdjustment[]     @relation("AdjustmentMember")
+  madeAdjustments  BillAdjustment[]     @relation("AdjustmentMaker")
 
   @@index([lastName, firstName])
   @@index([plotNumber])
@@ -186,6 +188,7 @@ model Invoice {
   feeType     FeeType             @relation(fields: [feeTypeId], references: [id])
   debitNote   DebitNote?          @relation(fields: [debitNoteId], references: [id])
   allocations PaymentAllocation[]
+  adjustments BillAdjustment[]
 
   // Billing is idempotent: one invoice per member, fee and period.
   @@unique([userId, feeTypeId, period])
@@ -583,4 +586,29 @@ model DebitNote {
 
   @@index([userId])
   @@index([year])
+}
+
+enum AdjustmentKind {
+  REDUCE // the bill was lowered
+  REVERSE // the bill was cancelled in full
+}
+
+// A bill raised in error, reversed or lowered after it was issued. The bill
+// keeps its history: the statement shows the original charge and this credit.
+model BillAdjustment {
+  id          Int            @id @default(autoincrement())
+  invoiceId   Int
+  userId      Int
+  kind        AdjustmentKind
+  amount      Int // kobo taken off the bill
+  reason      String
+  createdById Int?
+  createdAt   DateTime       @default(now())
+
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  user      User    @relation("AdjustmentMember", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation("AdjustmentMaker", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([invoiceId])
 }

@@ -35,16 +35,26 @@ export default function ReceivePayment() {
     setPreview(null);
     if (!member || !kobo) return;
     const t = setTimeout(() => {
-      api.post('/api/payments/preview', { userId: member.id, amount: kobo, invoiceId: v.invoiceId ? Number(v.invoiceId) : null }).then(setPreview).catch(() => setPreview(null));
+      api.post('/api/payments/preview', { userId: member.id, amount: kobo, ...target(v.invoiceId) }).then(setPreview).catch(() => setPreview(null));
     }, 250);
     return () => clearTimeout(t);
   }, [member, kobo, v.invoiceId]);
 
+  // "dn:12" settles every bill on debit note 12 first; a number settles that one bill first.
+  const target = (val) => {
+    if (!val) return { invoiceId: null };
+    if (String(val).startsWith('dn:')) return { invoiceIds: invoices.filter((i) => i.debitNote?.id === Number(val.slice(3))).map((i) => i.id) };
+    return { invoiceId: Number(val) };
+  };
+  const noteOptions = [...new Map(invoices.filter((i) => i.debitNote).map((i) => [i.debitNote.id, i.debitNote])).values()].map((n) => ({
+    ...n,
+    balance: invoices.filter((i) => i.debitNote?.id === n.id).reduce((t, i) => t + i.amount - i.amountPaid, 0),
+  }));
   const owed = invoices.reduce((s, i) => s + i.amount - i.amountPaid, 0);
   const { busy, error, run, setError } = useSubmit(async () => {
     if (!kobo) return setError(new Error('Enter a valid amount, e.g. 5000 or 5,000.00'));
     const r = await api.post('/api/payments/receive', {
-      userId: member.id, amount: kobo, method: v.method, paidAt: v.paidAt, reference: v.reference || null, note: v.note || null, invoiceId: v.invoiceId ? Number(v.invoiceId) : null,
+      userId: member.id, amount: kobo, method: v.method, paidAt: v.paidAt, reference: v.reference || null, note: v.note || null, ...target(v.invoiceId),
     });
     setDone(r);
     setMember(null);
@@ -103,9 +113,10 @@ export default function ReceivePayment() {
               <Field label="Date received"><input type="date" max={todayIso()} value={v.paidAt} onChange={set('paidAt')} required /></Field>
               <Field label="Reference" hint="Bank / POS reference; each can be used once."><input value={v.reference} onChange={set('reference')} /></Field>
             </div>
-            <Field label="Settle this invoice first (optional)">
+            <Field label="Pay this first (optional)" hint="e.g. a payment meant for this year's debit note while older bills are still open.">
               <select value={v.invoiceId} onChange={set('invoiceId')} disabled={!invoices.length}>
                 <option value="">Oldest first (recommended)</option>
+                {noteOptions.map((n) => <option key={`dn${n.id}`} value={`dn:${n.id}`}>Debit note {n.noteNo} — {naira(n.balance)} still owed</option>)}
                 {invoices.map((i) => <option key={i.id} value={i.id}>{i.description} — {naira(i.amount - i.amountPaid)} due {date(i.dueDate)}</option>)}
               </select>
             </Field>

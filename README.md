@@ -68,6 +68,15 @@ On your own server any SMTP account works instead (`SMTP_HOST`, `SMTP_PORT`, `SM
 
 Every payment is taken off the member's oldest bills first, so it nets off the debit note with no extra steps. A new member joining mid-year can be given their own note from their member page (**Issue debit note**, starting from the month they join). The monthly billing never charges a month that is already on a debit note.
 
+## Correcting mistakes (reversals)
+
+- **A bill raised in error or for the wrong amount:** on the member's page → Invoices, or Ledger → Invoices, click **Reverse / lower**. Reverse cancels it in full; Lower sets the correct amount. Anything already paid on it is kept as the member's credit and used straight away on their other unpaid bills. The statement keeps the original charge and shows the correction as a credit.
+- **A whole debit note issued in error:** open the note and click **Reverse note**, even if payments were taken off it. Then issue a corrected note.
+- **A payment recorded in error, or one that bounced:** on the member's page → Payments (or the receipt), click **Correct → Reverse it**. The bills it paid owe again; if its extra credit was already used on other bills, that is undone too.
+- **A payment meant for this year but put on last year's bills:** **Correct → Move it to other bills**, pick the debit note (or tick bills), check, then move. Last year's bills owe again. When receiving a payment you can also choose **Pay this first → Debit note …** so it never lands on the wrong year.
+
+Every correction asks for a reason and is kept in the audit log; nothing is deleted.
+
 ## Getting updates (after changes are made)
 
 Your data lives in the `local-data` folder, so updating the program never touches it.

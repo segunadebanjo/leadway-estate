@@ -81,16 +81,15 @@ test('reversing a payment restores the invoices and takes back its credit', asyn
   await assertLedgerConsistent(assert);
 });
 
-test('reversal is refused once the credit it created has been spent', async () => {
+test('reversing a payment whose credit was spent also undoes the credit application', async () => {
   const r = await receive({ userId: u.id, amount: 500_000 }); // nothing owed: all credit
   await ctx.adminAgent.post('/api/ledger/invoices/assign', { feeTypeId: (await prisma.feeType.findFirst()).id, userIds: [u.id], dueDate: '2026-12-01', amount: 500_000 });
   assert.equal((await prisma.user.findUnique({ where: { id: u.id } })).creditBalance, 0, 'credit was applied to the new bill');
   const rev = await ctx.adminAgent.post(`/api/payments/${r.body.payment.id}/reverse`, { reason: 'mistake' });
-  assert.equal(rev.status, 409);
-  // Reverse the account-credit receipt first, then the original.
+  assert.equal(rev.status, 200, JSON.stringify(rev.body));
   const creditReceipt = await prisma.payment.findFirst({ where: { userId: u.id, method: 'ACCOUNT_CREDIT' } });
-  assert.equal((await ctx.adminAgent.post(`/api/payments/${creditReceipt.id}/reverse`, { reason: 'unwind' })).status, 200);
-  assert.equal((await ctx.adminAgent.post(`/api/payments/${r.body.payment.id}/reverse`, { reason: 'mistake' })).status, 200);
+  assert.equal(creditReceipt.status, 'REVERSED');
+  assert.equal((await ctx.adminAgent.get(`/api/residents/${u.id}`)).body.balance.outstanding, 500_000, 'the bill owes again');
   await assertLedgerConsistent(assert);
 });
 

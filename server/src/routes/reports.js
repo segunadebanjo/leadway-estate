@@ -188,16 +188,22 @@ router.get('/billing-vs-collection', async (req, res) => {
 export async function memberStatement(userId, from, to) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, membershipId: true, firstName: true, lastName: true, plotNumber: true, street: true, email: true, phone: true, creditBalance: true } });
   if (!user) throw notFound('Member not found');
-  const [invoices, payments, adjustments] = await Promise.all([
-    prisma.invoice.findMany({ where: { userId, status: { not: 'VOID' } }, select: { id: true, description: true, amount: true, createdAt: true, dueDate: true, debitNote: { select: { id: true, noteNo: true, year: true, issueDate: true } } } }),
+  const [invoices, payments, adjustments, billAdjustments] = await Promise.all([
+    // Reversed bills stay on the statement (charge, then a reversal credit) once they have an adjustment record.
+    prisma.invoice.findMany({
+      where: { userId, OR: [{ status: { not: 'VOID' } }, { adjustments: { some: {} } }] },
+      select: { id: true, description: true, amount: true, createdAt: true, dueDate: true, adjustments: { select: { kind: true, amount: true } }, debitNote: { select: { id: true, noteNo: true, year: true, issueDate: true } } },
+    }).then((rows) => rows.map((i) => ({ ...i, amount: i.amount + i.adjustments.filter((a) => a.kind === 'REDUCE').reduce((t, a) => t + a.amount, 0) }))),
     prisma.payment.findMany({ where: { userId, ...CASH }, select: { id: true, receiptNo: true, amount: true, paidAt: true, method: true, reference: true } }),
     prisma.creditEntry.findMany({ where: { userId, kind: 'ADJUSTMENT' } }),
+    prisma.billAdjustment.findMany({ where: { userId }, include: { invoice: { select: { description: true, createdAt: true, debitNote: { select: { id: true, noteNo: true, issueDate: true } } } } }, orderBy: { id: 'asc' } }),
   ]);
   // Debits: bills. Credits: money received and executive credit adjustments.
   // Closing balance = outstanding − credit held (negative means in credit).
   const entries = [
     ...invoices.filter((i) => !i.debitNote).map((i) => ({ date: todayIso(i.createdAt), sort: i.createdAt.getTime(), type: 'Bill', description: i.description, ref: `INV-${i.id}`, debit: i.amount, credit: 0 })),
     ...debitNoteEntries(invoices.filter((i) => i.debitNote)),
+    ...reversalEntries(billAdjustments),
     ...payments.map((p) => ({ date: todayIso(p.paidAt), sort: p.paidAt.getTime(), type: 'Payment', description: `${METHOD[p.method] || p.method}${p.reference ? ` (${p.reference})` : ''}`, ref: p.receiptNo, debit: 0, credit: p.amount, paymentId: p.id })),
     ...adjustments.map((c) => ({ date: todayIso(c.createdAt), sort: c.createdAt.getTime(), type: 'Adjustment', description: c.note || 'Credit adjustment', ref: `ADJ-${c.id}`, debit: c.amount < 0 ? -c.amount : 0, credit: c.amount > 0 ? c.amount : 0 })),
   ].sort((a, b) => a.sort - b.sort);
@@ -216,6 +222,37 @@ export async function memberStatement(userId, from, to) {
   }
   const closing = rows.length ? rows[rows.length - 1].balance : opening;
   return { user, from: from || null, to: to || null, opening, closing, rows, totals: { debit: rows.reduce((s, r) => s + r.debit, 0), credit: rows.reduce((s, r) => s + r.credit, 0) } };
+}
+
+// Bills reversed or lowered: a credit line each (a whole debit note reversed at once is one line).
+function reversalEntries(adjustments) {
+  const groups = new Map();
+  for (const a of adjustments) {
+    const dn = a.invoice.debitNote;
+    const key = dn && a.kind === 'REVERSE' ? `dn${dn.id}|${a.reason}|${todayIso(a.createdAt)}` : `a${a.id}`;
+    const g = groups.get(key) || { first: a, amount: 0, count: 0 };
+    g.amount += a.amount;
+    g.count++;
+    groups.set(key, g);
+  }
+  return [...groups.values()].map(({ first: a, amount, count }) => {
+    const dn = a.invoice.debitNote;
+    const what = count > 1 && dn ? `Debit note ${dn.noteNo}` : a.invoice.description;
+    const reason = a.reason.replace(/^Debit note \S+ reversed: /, '');
+    // A correction never comes before the charge it corrects (a note can be dated ahead, e.g. 1 January).
+    const charged = dn ? dn.issueDate : a.invoice.createdAt;
+    const at = a.createdAt > charged ? a.createdAt : charged;
+    return {
+      date: dn && at === charged ? dn.issueDate.toISOString().slice(0, 10) : todayIso(at),
+      sort: at.getTime() + 1,
+      type: a.kind === 'REVERSE' ? 'Reversal' : 'Reduction',
+      description: `${what} ${a.kind === 'REVERSE' ? 'reversed' : 'reduced'}: ${reason}`,
+      ref: count > 1 && dn ? `${dn.noteNo}-R` : `ADJ-${a.id}`,
+      debit: 0,
+      credit: amount,
+      ...(dn ? { debitNoteId: dn.id } : {}),
+    };
+  });
 }
 
 // A debit note is one line on the statement: its number, what it covers and its total.
@@ -244,7 +281,7 @@ router.get('/statement', async (req, res) => {
       { key: 'description', label: 'Description' },
       { key: 'ref', label: 'Reference' },
       { key: 'debit', label: 'Debit (NGN)', map: (x) => (x.debit ? naira(x.debit) : '') },
-      { key: 'credit', label: 'Credit (NGN)', map: (x) => (x.credit ? naira(x.credit) : '') },
+      { key: 'credit', label: 'Payments & credits (NGN)', map: (x) => (x.credit ? naira(x.credit) : '') },
       { key: 'balance', label: 'Balance (NGN)', map: (x) => naira(x.balance) },
     ], rows);
   }

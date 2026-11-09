@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, qs } from '../../api.js';
 import { Badge, Card, ErrorNote, Field, Loading, MemberPicker, Modal, Money, PageHeader, Pager, SearchField, Table, useDebounced, Tabs, useFetch, useSubmit } from '../../components/ui.jsx';
+import { CorrectPaymentModal, ReverseBillModal } from '../../components/Corrections.jsx';
 import { METHOD, addDaysIso, date, dateTime, fullName, humanize, koboToInput, naira, toKobo, todayIso } from '../../format.js';
 
 export default function Ledger() {
@@ -22,7 +23,8 @@ export default function Ledger() {
 function Invoices() {
   const [f, setF] = useState({ q: '', status: 'OPEN', overdue: '', feeTypeId: '', page: 1 });
   const fees = useFetch('/api/ledger/fee-types');
-  const { data, error } = useFetch(`/api/ledger/invoices${qs({ ...f, q: useDebounced(f.q), pageSize: 50 })}`);
+  const { data, error, reload } = useFetch(`/api/ledger/invoices${qs({ ...f, q: useDebounced(f.q), pageSize: 50 })}`);
+  const [fixBill, setFixBill] = useState(null);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value, page: 1 });
   return (
     <Card>
@@ -38,13 +40,15 @@ function Invoices() {
           <Table rows={data.rows} empty="No invoices match." columns={[
             { key: 'member', label: 'Member', render: (i) => <Link to={`/admin/residents/${i.user.id}`}>{fullName(i.user)}</Link> },
             { key: 'id', label: 'ID', render: (i) => i.user.membershipId },
-            { key: 'description', label: 'Description' },
+            { key: 'description', label: 'Description', render: (i) => <>{i.description}{i.debitNote && <> · <Link to={`/debit-notes/${i.debitNote.id}`}>{i.debitNote.noteNo}</Link></>}</> },
             { key: 'dueDate', label: 'Due', render: (i) => date(i.dueDate) },
             { key: 'status', label: 'Status', render: (i) => <Badge status={i.status} /> },
             { key: 'amount', label: 'Amount', align: 'right', render: (i) => <Money v={i.amount} /> },
             { key: 'balance', label: 'Balance', align: 'right', render: (i) => (i.status === 'VOID' ? '—' : <Money v={i.amount - i.amountPaid} />) },
+            { key: 'act', label: '', align: 'right', render: (i) => i.status !== 'VOID' && <button className="btn btn-ghost btn-small" onClick={() => setFixBill(i)}>Reverse / lower</button> },
           ]}
-          footer={<tr><td colSpan={5}>Total ({data.total} invoices)</td><td className="right"><Money v={data.totals.amount} /></td><td className="right"><Money v={data.totals.amount - data.totals.paid} /></td></tr>} />
+          footer={<tr><td colSpan={5}>Total ({data.total} invoices)</td><td className="right"><Money v={data.totals.amount} /></td><td className="right"><Money v={data.totals.amount - data.totals.paid} /></td><td /></tr>} />
+          {fixBill && <ReverseBillModal bill={fixBill} onClose={() => setFixBill(null)} onDone={() => { setFixBill(null); reload(); }} />}
           <Pager page={data.page} pageSize={data.pageSize} total={data.total} onPage={(page) => setF({ ...f, page })} />
         </>
       )}
@@ -54,7 +58,8 @@ function Invoices() {
 
 function Payments() {
   const [f, setF] = useState({ q: '', method: '', status: '', from: '', to: '', page: 1 });
-  const { data, error } = useFetch(`/api/payments${qs({ ...f, q: useDebounced(f.q), pageSize: 50 })}`);
+  const { data, error, reload } = useFetch(`/api/payments${qs({ ...f, q: useDebounced(f.q), pageSize: 50 })}`);
+  const [fixPayment, setFixPayment] = useState(null);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value, page: 1 });
   return (
     <Card>
@@ -77,7 +82,9 @@ function Payments() {
             { key: 'reference', label: 'Reference' },
             { key: 'status', label: 'Status', render: (p) => <Badge status={p.status} /> },
             { key: 'amount', label: 'Amount', align: 'right', render: (p) => <Money v={p.amount} /> },
+            { key: 'act', label: '', align: 'right', render: (p) => p.status === 'COMPLETED' && <button className="btn btn-ghost btn-small" onClick={() => setFixPayment(p.id)}>Correct</button> },
           ]} />
+          {fixPayment && <CorrectPaymentModal paymentId={fixPayment} onClose={() => setFixPayment(null)} onDone={() => { setFixPayment(null); reload(); }} />}
           <Pager page={data.page} pageSize={data.pageSize} total={data.total} onPage={(page) => setF({ ...f, page })} />
         </>
       )}

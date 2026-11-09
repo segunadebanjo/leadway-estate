@@ -109,7 +109,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 router.post('/:id/void', requireAdmin, async (req, res) => {
   const noteId = parse(id, req.params.id);
   const body = parse(z.object({ reason: text(300) }), req.body);
-  const note = await voidNote(noteId, body.reason);
-  await audit(req, 'debit_note.void', 'DebitNote', noteId, { noteNo: note.noteNo, reason: body.reason });
+  const note = await voidNote(noteId, body.reason, req.user.id);
+  await audit(req, 'debit_note.reverse', 'DebitNote', noteId, { noteNo: note.noteNo, reason: body.reason, paidMovedToCredit: note.released });
   res.json(await getNote(noteId));
 });

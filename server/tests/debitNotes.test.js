@@ -106,7 +106,7 @@ test('issue debit notes: preview, one note per member, payments net off, stateme
   await assertLedgerConsistent(assert);
 });
 
-test('cancel a debit note: refused once paid; otherwise its lines are freed so it can be issued again', async () => {
+test('reverse a debit note: its lines are freed so it can be issued again, paid money becomes credit', async () => {
   const ctx = await setup({ residents: 1 });
   const f = await fees();
   const [a] = ctx.residents;
@@ -124,8 +124,9 @@ test('cancel a debit note: refused once paid; otherwise its lines are freed so i
   assert.equal(again.body.notes[0].total, 2_500_000 + 12 * 1_000_000);
 
   await ctx.adminAgent.post('/api/payments/receive', { userId: a.id, amount: 100_000, method: 'CASH', paidAt: '2026-11-05' });
-  const refused = await ctx.adminAgent.post(`/api/debit-notes/${again.body.notes[0].noteId}/void`, { reason: 'x' });
-  assert.equal(refused.status, 409);
+  const reversed = await ctx.adminAgent.post(`/api/debit-notes/${again.body.notes[0].noteId}/void`, { reason: 'x' });
+  assert.equal(reversed.status, 200, 'a paid note can be reversed; the payment becomes credit');
+  assert.equal((await prisma.user.findUnique({ where: { id: a.id } })).creditBalance, 100_000);
 
   // Only for chosen members; residents cannot issue.
   const res = await login(a);

@@ -5,7 +5,7 @@ import { badRequest, notFound } from '../lib/errors.js';
 import { dateOnly, todayIso } from '../lib/dates.js';
 import { parse, paging, pageQuery, z, id, kobo, text, optionalText, isoDate } from '../lib/validate.js';
 import { requireAdmin, requireResident, requireAuth } from '../middleware/auth.js';
-import { paymentInclude, previewAllocation, recordPayment, reversePayment } from '../services/ledger.js';
+import { movePayment, paymentInclude, previewAllocation, recordPayment, reversePayment } from '../services/ledger.js';
 import { notifyPayment } from '../services/receipts.js';
 import { confirmOnlinePayment, initializeOnlinePayment } from '../services/onlinePayments.js';
 import { validSignature } from '../services/paystack.js';
@@ -89,11 +89,13 @@ const receiveBody = z.object({
   userId: id,
   amount: kobo,
   invoiceId: id.optional().nullable(),
+  // Bills to settle first, in this order (e.g. every line of a debit note).
+  invoiceIds: z.array(id).max(100).optional(),
 });
 
 router.post('/preview', requireAdmin, async (req, res) => {
   const body = parse(receiveBody, req.body);
-  res.json(await previewAllocation(body.userId, body.amount, body.invoiceId ?? null));
+  res.json(await previewAllocation(body.userId, body.amount, body.invoiceIds?.length ? body.invoiceIds : body.invoiceId ?? null));
 });
 
 // Receive Payment: credited to the member, allocated oldest-first (or to the
@@ -122,6 +124,7 @@ router.post('/receive', requireAdmin, async (req, res) => {
       note: body.note,
       recordedById: req.user.id,
       invoiceId: body.invoiceId ?? null,
+      invoiceIds: body.invoiceIds ?? null,
     });
     await audit(req, 'payment.receive', 'Payment', r.payment.id, { receiptNo: r.payment.receiptNo, amount: body.amount, method: body.method, credit: r.credit }, tx);
     return r;
@@ -134,8 +137,32 @@ router.post('/:id/reverse', requireAdmin, async (req, res) => {
   const paymentId = parse(id, req.params.id);
   const body = parse(z.object({ reason: text(300) }), req.body);
   const payment = await reversePayment(paymentId, body.reason, req.user.id);
-  await audit(req, 'payment.reverse', 'Payment', paymentId, { receiptNo: payment.receiptNo, amount: payment.amount, reason: body.reason });
+  await audit(req, 'payment.reverse', 'Payment', paymentId, { receiptNo: payment.receiptNo, amount: payment.amount, reason: body.reason, creditReceiptsUndone: payment.undone });
   res.json(payment);
+});
+
+// The member's bills a payment could be moved to: open ones and the ones it is on now.
+router.get('/:id/move-options', requireAdmin, async (req, res) => {
+  const paymentId = parse(id, req.params.id);
+  const payment = await prisma.payment.findUnique({ where: { id: paymentId }, include: { allocations: { where: { amount: { gt: 0 } } } } });
+  if (!payment) throw notFound('Payment not found');
+  const onIt = new Map();
+  for (const a of payment.allocations) onIt.set(a.invoiceId, (onIt.get(a.invoiceId) || 0) + a.amount);
+  const bills = await prisma.invoice.findMany({
+    where: { userId: payment.userId, status: { not: 'VOID' }, OR: [{ status: { in: ['UNPAID', 'PARTIAL'] } }, { id: { in: [...onIt.keys()] } }] },
+    orderBy: [{ dueDate: 'asc' }, { id: 'asc' }],
+    include: { debitNote: { select: { id: true, noteNo: true, year: true } } },
+  });
+  res.json({ payment: { id: payment.id, receiptNo: payment.receiptNo, amount: payment.amount, status: payment.status, method: payment.method }, bills: bills.map((b) => ({ ...b, fromThisPayment: onIt.get(b.id) || 0 })) });
+});
+
+// Put a payment on different bills (e.g. meant for this year's debit note, not last year's).
+router.post('/:id/move', requireAdmin, async (req, res) => {
+  const paymentId = parse(id, req.params.id);
+  const body = parse(z.object({ invoiceIds: z.array(id).min(1, 'choose at least one bill').max(100), dryRun: z.boolean().default(false), reason: optionalText(300) }), req.body);
+  const r = await movePayment(paymentId, body.invoiceIds, req.user.id, { dryRun: body.dryRun });
+  if (!body.dryRun) await audit(req, 'payment.move', 'Payment', paymentId, { receiptNo: r.payment.receiptNo, from: r.before, to: r.after.map((l) => ({ invoiceId: l.invoiceId, description: l.description, amount: l.amount })), credit: r.credit, reason: body.reason });
+  res.json(r);
 });
 
 // ---- Upload a bank statement: receive many payments at once ------------------

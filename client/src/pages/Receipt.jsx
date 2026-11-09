@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { CorrectPaymentModal } from '../components/Corrections.jsx';
 import { useAuth } from '../auth.jsx';
 import { ErrorNote, Loading, Money, useFetch } from '../components/ui.jsx';
 import { METHOD, dateTime, fullName, naira } from '../format.js';
@@ -6,7 +8,8 @@ import { METHOD, dateTime, fullName, naira } from '../format.js';
 export default function Receipt() {
   const { id } = useParams();
   const { user } = useAuth();
-  const { data: p, error } = useFetch(`/api/payments/${id}`);
+  const { data: p, error, reload } = useFetch(`/api/payments/${id}`);
+  const [fixing, setFixing] = useState(false);
   if (error) return <ErrorNote error={error} />;
   if (!p) return <Loading />;
   const credit = p.creditEntries.filter((c) => c.kind === 'OVERPAYMENT').reduce((s, c) => s + c.amount, 0);
@@ -17,6 +20,7 @@ export default function Receipt() {
         <button className="btn" onClick={() => window.print()}>
           Print / save as PDF
         </button>
+        {user.role === 'ADMIN' && p.status === 'COMPLETED' && <button className="btn btn-ghost" onClick={() => setFixing(true)}>Correct this payment</button>}
         <Link className="btn btn-ghost" to={user.role === 'ADMIN' ? `/admin/residents/${p.user.id}` : '/payments'}>
           Back
         </Link>
@@ -95,6 +99,7 @@ export default function Receipt() {
           <span className={`stamp ${reversed ? 'void' : ''}`}>{reversed ? 'REVERSED' : 'PAID'}</span>
         </div>
       </article>
+      {fixing && <CorrectPaymentModal paymentId={p.id} onClose={() => setFixing(false)} onDone={() => { setFixing(false); reload(); }} />}
     </>
   );
 }

@@ -5,9 +5,10 @@ import { useAuth } from '../auth.jsx';
 import { Badge, Card, ErrorNote, Field, Flash, Loading, Modal, Money, PageHeader, SearchField, Table, downloadCsv, useDebounced, useFetch, useSubmit } from '../components/ui.jsx';
 import { METHOD, date, dateTime, fullName, koboToInput, naira, toKobo, todayIso } from '../format.js';
 import { PayModal } from './resident/Home.jsx';
+import { CorrectPaymentModal, ReverseBillModal } from '../components/Corrections.jsx';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const STATUS_LABEL = { UNPAID: 'Unpaid', PARTIAL: 'Part-paid', PAID: 'Paid', VOID: 'Cancelled' };
+const STATUS_LABEL = { UNPAID: 'Unpaid', PARTIAL: 'Part-paid', PAID: 'Paid', VOID: 'Reversed' };
 const thisYear = () => Number(todayIso().slice(0, 4));
 // From October on, the next year's notes are the ones being prepared.
 const billingYear = () => (Number(todayIso().slice(5, 7)) >= 10 ? thisYear() + 1 : thisYear());
@@ -51,7 +52,7 @@ export function DebitNotesAdmin() {
               <option value="UNPAID">Unpaid</option>
               <option value="PARTIAL">Part-paid</option>
               <option value="PAID">Paid</option>
-              <option value="VOID">Cancelled</option>
+              <option value="VOID">Reversed</option>
             </select>
           </Field>
         </div>
@@ -66,7 +67,7 @@ export function DebitNotesAdmin() {
             { key: 'amount', label: 'Amount', align: 'right', render: (n) => <Money v={n.amount} /> },
             { key: 'paid', label: 'Paid', align: 'right', render: (n) => <Money v={n.paid} /> },
             { key: 'balance', label: 'Balance', align: 'right', render: (n) => (n.status === 'VOID' ? '—' : <Money v={n.balance} className={n.balance ? 'text-bad' : 'text-good'} />) },
-          ]} footer={data.rows.length > 0 && <tr><td colSpan={5}>Total ({data.rows.filter((n) => n.status !== 'VOID').length} notes, cancelled ones excluded)</td><td className="right"><Money v={data.totals.amount} /></td><td className="right"><Money v={data.totals.paid} /></td><td className="right"><Money v={data.totals.balance} /></td></tr>} />
+          ]} footer={data.rows.length > 0 && <tr><td colSpan={5}>Total ({data.rows.filter((n) => n.status !== 'VOID').length} notes, reversed ones excluded)</td><td className="right"><Money v={data.totals.amount} /></td><td className="right"><Money v={data.totals.paid} /></td><td className="right"><Money v={data.totals.balance} /></td></tr>} />
         )}
       </Card>
       {issuing && <IssueDebitNotes onClose={() => setIssuing(false)} onDone={(r, year) => { setIssuing(false); setF({ ...f, year: String(year) }); setFlash(`${r.issued} debit note(s) issued for ${naira(r.total)}${r.skipped.length ? `; ${r.skipped.length} member(s) skipped (already billed)` : ''}.`); reload(); }} />}
@@ -257,12 +258,15 @@ export function DebitNoteView() {
   const [paying, setPaying] = useState(null);
   const [flash, setFlash] = useState(null);
   const [err, setErr] = useState(null);
+  const [fixBill, setFixBill] = useState(null);
+  const [fixPayment, setFixPayment] = useState(null);
   if (error) return <ErrorNote error={error} />;
   if (!n) return <Loading />;
   const voided = n.status === 'VOID';
   const outstanding = summary.data?.balance.outstanding || 0;
   const cancel = async () => {
-    const reason = prompt(`Cancel ${n.noteNo}? Its bills will be removed so you can issue it again. Give a reason:`);
+    const paidNote = n.paid > 0 ? `\n\n${naira(n.paid)} has been paid on it: that money will be kept as the member's credit and used on their other unpaid bills.` : '';
+    const reason = prompt(`Reverse ${n.noteNo}? All its bills are reversed, and you can issue a corrected note afterwards.${paidNote}\n\nReason (shown on the statement):`);
     if (!reason) return;
     try {
       await api.post(`/api/debit-notes/${n.id}/void`, { reason });
@@ -281,7 +285,7 @@ export function DebitNoteView() {
         )}
         {admin && !voided && n.balance > 0 && <Link className="btn btn-ghost" to={`/admin/receive-payment?member=${n.user.id}`}>Receive payment</Link>}
         {admin ? <Link className="btn btn-ghost" to={`/admin/residents/${n.user.id}`}>Member page &amp; statement</Link> : <Link className="btn btn-ghost" to="/statement">My statement</Link>}
-        {admin && !voided && n.paid === 0 && <button className="btn btn-ghost" onClick={cancel}>Cancel note</button>}
+        {admin && !voided && <button className="btn btn-ghost" onClick={cancel}>Reverse note</button>}
         <Link className="btn btn-ghost" to={admin ? '/admin/debit-notes' : '/debit-notes'}>Back</Link>
       </div>
       <ErrorNote error={err} />
@@ -316,7 +320,7 @@ export function DebitNoteView() {
           <tbody>
             {lines.map((i) => (
               <tr key={i.id} className={i.status === 'VOID' ? 'muted' : ''}>
-                <td data-label="Description"><strong>{i.description}</strong>{i.status === 'VOID' && !voided && ' (waived)'}</td>
+                <td data-label="Description"><strong>{i.description}</strong>{i.status === 'VOID' && !voided && ' (reversed)'}{admin && !voided && i.status !== 'VOID' && <> <button className="link-button no-print" style={{ fontSize: '.8rem' }} onClick={() => setFixBill(i)}>reverse / lower</button></>}</td>
                 <td data-label="Due">{date(i.dueDate)}</td>
                 <td data-label="Amount" className="right"><Money v={i.amount} /></td>
                 <td data-label="Paid" className="right">{i.status === 'VOID' ? '—' : <Money v={i.amountPaid} />}</td>
@@ -337,7 +341,7 @@ export function DebitNoteView() {
                   <tr key={r.id}>
                     <td data-label="Date">{dateTime(r.paidAt)}</td>
                     <td data-label="Receipt"><Link to={`/receipts/${r.id}`}>{r.receiptNo}</Link></td>
-                    <td data-label="Method">{METHOD[r.method]}</td>
+                    <td data-label="Method">{METHOD[r.method]}{admin && <> <button className="link-button no-print" style={{ fontSize: '.8rem' }} onClick={() => setFixPayment(r.id)}>correct</button></>}</td>
                     <td data-label="Amount" className="right"><Money v={r.amount} /></td>
                   </tr>
                 ))}
@@ -349,13 +353,15 @@ export function DebitNoteView() {
           <div style={{ fontSize: '.9rem' }}>
             {n.message && <div style={{ whiteSpace: 'pre-line', marginBottom: 6 }}><strong>How to pay:</strong> {n.message}</div>}
             <div className="muted">Quote your membership ID {n.user.membershipId} with every payment. You can also pay online after signing in.</div>
-            {voided && <div className="text-bad">Cancelled: {n.voidReason}</div>}
+            {voided && <div className="text-bad">Reversed: {n.voidReason}</div>}
           </div>
           <span className={`stamp ${n.status === 'PAID' ? '' : 'void'}`}>
-            {voided ? 'CANCELLED' : n.status === 'PAID' ? 'PAID' : `DUE ${naira(n.balance)}`}
+            {voided ? 'REVERSED' : n.status === 'PAID' ? 'PAID' : `DUE ${naira(n.balance)}`}
           </span>
         </div>
       </article>
+      {fixBill && <ReverseBillModal bill={fixBill} onClose={() => setFixBill(null)} onDone={() => { setFixBill(null); reload(); }} />}
+      {fixPayment && <CorrectPaymentModal paymentId={fixPayment} onClose={() => setFixPayment(null)} onDone={() => { setFixPayment(null); reload(); }} />}
       {paying && <PayModal {...paying} onClose={() => setPaying(null)} onDone={(msg) => { setPaying(null); setFlash(msg); reload(); summary.reload(); }} />}
     </>
   );
