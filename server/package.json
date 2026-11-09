@@ -15,7 +15,8 @@
     "db:seed": "node --env-file-if-exists=.env prisma/seed.js",
     "db:generate": "prisma generate",
     "postinstall": "prisma generate",
-    "test": "node --env-file-if-exists=.env.test tests/run.js"
+    "test": "node --env-file-if-exists=.env.test tests/run.js",
+    "db:demo": "node --env-file-if-exists=.env prisma/demo.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
