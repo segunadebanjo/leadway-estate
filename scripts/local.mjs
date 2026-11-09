@@ -43,11 +43,22 @@ function run(cmd, args, opts = {}) {
 
 say('Leadway Estate – starting on this computer');
 
-// 1. Install packages the first time (needs internet once).
+// 1. Install packages the first time, and again whenever an update changes
+//    the package list (needs internet then).
 for (const [dir, label] of [[ROOT, 'launcher'], [path.join(ROOT, 'server'), 'server'], [path.join(ROOT, 'client'), 'website']]) {
-  if (!fs.existsSync(path.join(dir, 'node_modules'))) {
-    step(`Installing ${label} packages (first time only, needs internet; a few minutes)…`);
+  const lock = crypto.createHash('sha256').update(fs.readFileSync(path.join(dir, 'package-lock.json'))).digest('hex');
+  const stamp = path.join(dir, 'node_modules', '.installed-lock');
+  const current = fs.existsSync(stamp) ? fs.readFileSync(stamp, 'utf8') : null;
+  if (current !== lock) {
+    const fresh = !fs.existsSync(path.join(dir, 'node_modules'));
+    // A folder installed before this check existed has no stamp: trust it once.
+    if (!fresh && current === null && fs.existsSync(path.join(dir, 'node_modules', '.package-lock.json'))) {
+      fs.writeFileSync(stamp, lock);
+      continue;
+    }
+    step(`Installing ${label} packages (${fresh ? 'first time' : 'after an update'}, needs internet; a few minutes)…`);
     run('npm', ['ci', '--include=dev', '--no-audit', '--no-fund'], { cwd: dir, error: `Could not install the ${label} packages. Check your internet connection and run this again.` });
+    fs.writeFileSync(stamp, lock);
   }
 }
 

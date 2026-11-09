@@ -27,6 +27,20 @@ Keep the black window open while you use the app; close it (or press Ctrl+C) to 
 
 Other people on the same Wi-Fi can use it at `http://<this computer's IP address>:4000` while it's running. To put it on the internet, see "Deploying online" below.
 
+## Getting updates (after changes are made)
+
+Your data lives in the `local-data` folder, so updating the program never touches it.
+
+**With GitHub Desktop (recommended):** install [GitHub Desktop](https://desktop.github.com), choose
+*File → Clone repository* → `segunadebanjo/leadway-estate` once. After that, to get changes:
+close the app window, click **Fetch origin** then **Pull origin**, and double-click the Start file again.
+
+**With the ZIP:** stop the app, download the new ZIP, unzip it, and copy the old `local-data` folder
+into the new folder before double-clicking Start. (Forget this step and you start with an empty app.)
+
+Either way, the Start file notices what changed: it installs new packages, updates the database
+tables and rebuilds the website by itself.
+
 ## Quick start for developers
 
 Prerequisites: Node 20+, PostgreSQL 14+ (or Docker).
