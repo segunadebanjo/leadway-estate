@@ -142,7 +142,7 @@ try {
       if (answer === 'y' || answer === 'yes') {
         step('Loading sample data…');
         run('node', ['prisma/demo.js'], { cwd: path.join(ROOT, 'server'), env, quiet: true });
-        fs.appendFileSync(FIRST_LOGIN, `\nSample residents use the password Resident123,\ne.g. adebayo.ogunleye@example.com (resident) or gate@example.com (security).\n`);
+        fs.appendFileSync(FIRST_LOGIN, `\nSample residents use the password Resident123,\ne.g. adebayo.ogunleye@example.com (resident) or gate@example.com (security).\nWhen you are ready for the real members, use "Remove sample data" on the Dashboard.\n`);
       }
     }
   }

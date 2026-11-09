@@ -6,6 +6,7 @@ import { dateOnly, todayIso } from '../lib/dates.js';
 import { parse, paging, pageQuery, z, id, kobo, text, optionalText, isoDate } from '../lib/validate.js';
 import { sendEmail } from '../lib/messaging.js';
 import { config } from '../config.js';
+import { removeSampleData, sampleDataSummary } from '../services/sampleData.js';
 
 // Admin: dashboard, service requests, expenses, audit log.
 export const router = Router();
@@ -151,6 +152,19 @@ router.delete('/expenses/:id', async (req, res) => {
   await prisma.expense.delete({ where: { id: eId } });
   await audit(req, 'expense.delete', 'Expense', eId, before);
   res.json({ ok: true });
+});
+
+// ---- Sample data -------------------------------------------------------------
+
+router.get('/sample-data', async (_req, res) => {
+  res.json({ loaded: await sampleDataSummary() });
+});
+
+router.post('/sample-data/remove', async (req, res) => {
+  const removed = await removeSampleData();
+  if (!removed) throw notFound('No sample data is loaded');
+  await audit(req, 'sampleData.remove', 'SampleData', null, removed);
+  res.json({ removed });
 });
 
 // ---- Audit log ---------------------------------------------------------------

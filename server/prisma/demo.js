@@ -1,24 +1,16 @@
 // Demo data for trying the app locally: residents, bills, payments, expenses,
 // assets, requests and visitor passes. Refuses to run in production.
 //   npm run db:seed && npm --prefix server run db:demo
+import { pathToFileURL } from 'node:url';
 import { prisma, transaction } from '../src/db.js';
 import { hashPassword } from '../src/lib/auth.js';
 import { runBilling, createInvoice } from '../src/services/billing.js';
 import { recordPayment } from '../src/services/ledger.js';
+import { SAMPLE_ASSET_NAMES, SAMPLE_EXPENSES, SAMPLE_FEE_CODE, SAMPLE_GUARD_EMAIL, SAMPLE_PEOPLE as PEOPLE, sampleEmail } from '../src/services/sampleData.js';
 
-if (process.env.NODE_ENV === 'production') {
-  console.error('Refusing to load demo data in production.');
-  process.exit(1);
-}
 
-const PEOPLE = [
-  ['Adebayo', 'Ogunleye', 'OWNER', 'A1', 'Palm Close'], ['Chioma', 'Nwosu', 'OWNER', 'A2', 'Palm Close'], ['Ibrahim', 'Musa', 'TENANT', 'A4', 'Palm Close'],
-  ['Funke', 'Adeyemi', 'OWNER', 'B3', 'Cedar Avenue'], ['Emeka', 'Obi', 'OWNER', 'B5', 'Cedar Avenue'], ['Kemi', 'Bakare', 'TENANT', 'B6', 'Cedar Avenue'],
-  ['Tunde', 'Lawal', 'OWNER', 'C1', 'Mango Street'], ['Ngozi', 'Eze', 'OWNER', 'C2', 'Mango Street'], ['Segun', 'Akinola', 'TENANT', 'C7', 'Mango Street'],
-  ['Halima', 'Bello', 'OWNER', 'D2', 'Coral Road'], ['Yemi', 'Alade', 'OWNER', 'D4', 'Coral Road'], ['Obinna', 'Okeke', 'TENANT', 'D9', 'Coral Road'],
-];
 
-async function main() {
+export async function loadDemoData() {
   if (await prisma.user.count({ where: { role: 'RESIDENT' } })) {
     console.log('Residents already exist – demo data not loaded.');
     return;
@@ -29,10 +21,10 @@ async function main() {
   const residents = [];
   for (const [firstName, lastName, occupancyType, plotNumber, street] of PEOPLE) {
     residents.push(await prisma.user.create({
-      data: { firstName, lastName, occupancyType, plotNumber, street, email: `${firstName}.${lastName}@example.com`.toLowerCase(), phone: `080${String(30000000 + residents.length * 7919).padStart(8, '0')}`, passwordHash, mustChangePassword: false, moveInDate: new Date('2023-03-01') },
+      data: { firstName, lastName, occupancyType, plotNumber, street, email: sampleEmail(firstName, lastName), phone: `080${String(30000000 + residents.length * 7919).padStart(8, '0')}`, passwordHash, mustChangePassword: false, moveInDate: new Date('2023-03-01') },
     }));
   }
-  await prisma.user.create({ data: { firstName: 'Gate', lastName: 'Officer', email: 'gate@example.com', role: 'SECURITY', passwordHash, mustChangePassword: false } });
+  await prisma.user.create({ data: { firstName: 'Gate', lastName: 'Officer', email: SAMPLE_GUARD_EMAIL, role: 'SECURITY', passwordHash, mustChangePassword: false } });
 
   // Six months of dues, as if the scheduler had been running.
   const now = new Date();
@@ -40,7 +32,7 @@ async function main() {
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, 1, 1));
     await runBilling(d);
   }
-  const ecf = await prisma.feeType.upsert({ where: { code: 'ELECTRICITY_CONNECTION' }, update: {}, create: { code: 'ELECTRICITY_CONNECTION', name: 'Electricity Connection Fee', amount: 2_500_000, frequency: 'ONE_OFF' } });
+  const ecf = await prisma.feeType.upsert({ where: { code: SAMPLE_FEE_CODE }, update: {}, create: { code: SAMPLE_FEE_CODE, name: 'Electricity Connection Fee', amount: 2_500_000, frequency: 'ONE_OFF' } });
   for (const r of residents.slice(0, 4)) await createInvoice({ userId: r.id, feeType: ecf, period: 'ECF-1', description: ecf.name, amount: ecf.amount, dueDate: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 28)) });
 
   // Payments: most pay, a few are behind, one has paid ahead.
@@ -58,19 +50,20 @@ async function main() {
     }
   }
 
-  const exp = [['Security', 'Guard services', 'SafeGuard Ltd', 45_000_000], ['Electricity / Diesel', 'Diesel for estate generator', 'Total Energies', 18_000_000], ['Waste Disposal', 'Refuse collection', 'LAWMA-accredited PSP', 6_000_000], ['Repairs & Maintenance', 'Gate motor repair', 'Gatefix', 3_500_000]];
+  const exp = SAMPLE_EXPENSES;
   for (let m = 3; m >= 0; m--) {
     for (const [category, description, payee, amount] of exp.slice(0, m === 0 ? 4 : 3)) {
       await prisma.expense.create({ data: { date: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - m, 3)), category, description, payee, amount, recordedById: admin.id } });
     }
   }
 
-  const gen = await prisma.asset.create({ data: { name: 'Generator 100kVA (Mikano)', category: 'EQUIPMENT', quantity: 1, unit: 'unit', location: 'Generator house', purchaseCost: 1_250_000_000, purchaseDate: new Date('2022-06-10') } });
+  const [genName, dieselName, bulbsName, barrowName] = SAMPLE_ASSET_NAMES;
+  const gen = await prisma.asset.create({ data: { name: genName, category: 'EQUIPMENT', quantity: 1, unit: 'unit', location: 'Generator house', purchaseCost: 1_250_000_000, purchaseDate: new Date('2022-06-10') } });
   await prisma.maintenanceLog.create({ data: { assetId: gen.id, date: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 12)), description: 'Full service, oil and filters', cost: 18_500_000, performedBy: 'Mikano Service' } });
-  const diesel = await prisma.asset.create({ data: { name: 'Diesel', category: 'CONSUMABLE', quantity: 60, minQuantity: 100, unit: 'litres', location: 'Generator house' } });
+  const diesel = await prisma.asset.create({ data: { name: dieselName, category: 'CONSUMABLE', quantity: 60, minQuantity: 100, unit: 'litres', location: 'Generator house' } });
   await prisma.stockMovement.createMany({ data: [{ assetId: diesel.id, type: 'RESTOCKED', quantity: 400, byId: admin.id, note: 'Opening stock' }, { assetId: diesel.id, type: 'USED', quantity: -340, byId: admin.id, toLocation: 'Generator' }] });
-  await prisma.asset.create({ data: { name: 'Street light bulbs (LED 100W)', category: 'CONSUMABLE', quantity: 24, minQuantity: 10, unit: 'pcs', location: 'Store' } });
-  await prisma.asset.create({ data: { name: 'Wheelbarrow', category: 'EQUIPMENT', quantity: 3, unit: 'pcs', location: 'Store' } });
+  await prisma.asset.create({ data: { name: bulbsName, category: 'CONSUMABLE', quantity: 24, minQuantity: 10, unit: 'pcs', location: 'Store' } });
+  await prisma.asset.create({ data: { name: barrowName, category: 'EQUIPMENT', quantity: 3, unit: 'pcs', location: 'Store' } });
 
   await prisma.serviceRequest.create({ data: { userId: residents[1].id, category: 'Electricity', title: 'Street light out by A2', description: 'The light on the pole opposite A2 has been off for a week.' } });
   await prisma.serviceRequest.create({ data: { userId: residents[4].id, category: 'Roads & Drainage', title: 'Blocked drain on Cedar Avenue', description: 'Water collects after rain near B5.', status: 'IN_PROGRESS', adminNote: 'Contractor booked for Saturday.' } });
@@ -79,4 +72,11 @@ async function main() {
   console.log(`Demo data loaded: ${residents.length} residents (password Resident123, e.g. ${residents[0].email}), gate@example.com (security).`);
 }
 
-main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());
+// Run directly: node prisma/demo.js (refuses in production).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('Refusing to load demo data in production.');
+    process.exit(1);
+  }
+  loadDemoData().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());
+}

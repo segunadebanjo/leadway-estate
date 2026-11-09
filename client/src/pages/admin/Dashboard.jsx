@@ -7,6 +7,15 @@ import { METHOD, dateTime, fullName, naira } from '../../format.js';
 export default function Dashboard() {
   const { data: d, error, reload } = useFetch('/api/admin/dashboard');
   const [flash, setFlash] = useState(null);
+  const sample = useFetch('/api/admin/sample-data');
+  const removeSample = useSubmit(async () => {
+    const n = sample.data.loaded;
+    if (!confirm(`Remove the sample data?\n\nThis deletes the ${n.residents} sample residents and the sample security login, with their bills, payments, requests and visitor passes, plus ${n.expenses} sample expenses and ${n.assets} sample store items.\n\nAnything you entered yourself is kept. This cannot be undone.`)) return;
+    await api.post('/api/admin/sample-data/remove');
+    setFlash('Sample data removed. You can now add the real members of the estate.');
+    sample.reload();
+    reload();
+  });
   const billing = useSubmit(async () => {
     const r = await api.post('/api/ledger/billing/run');
     setFlash(r.created ? `Billing run: ${r.created} new invoice(s) created.` : 'Billing run: everyone is already billed for this period.');
@@ -26,7 +35,18 @@ export default function Dashboard() {
           </>
         }
       />
-      <ErrorNote error={error || billing.error} />
+      <ErrorNote error={error || billing.error || removeSample.error} />
+      {sample.data?.loaded && (
+        <Card title="Sample data is loaded" className="card-notice">
+          <p>
+            The app holds {sample.data.loaded.residents} sample residents (such as Adebayo Ogunleye) with their bills and payments, plus sample expenses and store
+            items for trying things out. Remove them before you add the real members of the estate. Anything you entered yourself is kept.
+          </p>
+          <button className="btn btn-danger" onClick={removeSample.run} disabled={removeSample.busy}>
+            {removeSample.busy ? 'Removing…' : 'Remove sample data'}
+          </button>
+        </Card>
+      )}
       {!d ? (
         <Loading />
       ) : (

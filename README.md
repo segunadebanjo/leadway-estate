@@ -27,6 +27,14 @@ Keep the black window open while you use the app; close it (or press Ctrl+C) to 
 
 Other people on the same Wi-Fi can use it at `http://<this computer's IP address>:4000` while it's running. To put it on the internet, see "Deploying online" below.
 
+## Removing the sample data
+
+If you loaded the sample residents to try the app, sign in as admin. The **Dashboard** then shows a
+"Sample data is loaded" box. Click **Remove sample data** and confirm. It deletes the 12 sample residents,
+the sample gate login (gate@example.com) and everything that belongs to them: their bills, payments,
+requests and visitor passes, plus the sample expenses and store items. Anything you entered yourself is kept.
+New members are then numbered straight on from your highest real one.
+
 ## Getting updates (after changes are made)
 
 Your data lives in the `local-data` folder, so updating the program never touches it.
