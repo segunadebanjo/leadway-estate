@@ -51,7 +51,8 @@ export const config = {
   },
   // Brevo sends email over HTTPS (works where SMTP ports are blocked, e.g. free hosting).
   brevo: {
-    apiKey: env.BREVO_API_KEY || '',
+    // Pasted keys often carry spaces, quotes or a line break; strip them.
+    apiKey: String(env.BREVO_API_KEY || '').trim().replace(/^['"]|['"]$/g, '').trim(),
     baseUrl: env.BREVO_BASE_URL || 'https://api.brevo.com',
   },
   // "Leadway Estate <estate@example.com>": the sender shown on every email.

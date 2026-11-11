@@ -46,8 +46,21 @@ async function sendViaBrevo({ to, subject, text, html }) {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`Brevo HTTP ${res.status} ${body.slice(0, 200)}`);
+    throw new Error(explainBrevoError(res.status, body, config.brevo.apiKey, config.emailFrom));
   }
+}
+
+/** Turn Brevo's error into a sentence that says what to change in Render. */
+export function explainBrevoError(status, body, apiKey = '', from = '') {
+  const raw = `Brevo HTTP ${status} ${String(body || '').slice(0, 200)}`.trim();
+  if (status === 401) {
+    if (/^xsmtpsib-/.test(apiKey)) return `Brevo refused the key: BREVO_API_KEY holds an SMTP key (starts "xsmtpsib-"). In Brevo → SMTP & API → API Keys, generate an API key (starts "xkeysib-") and put that in BREVO_API_KEY in Render. (${raw})`;
+    return `Brevo did not recognise BREVO_API_KEY (it was mistyped, deleted or belongs to another Brevo account). In Brevo → SMTP & API → API Keys, generate a new API key (starts "xkeysib-"), paste it into BREVO_API_KEY in Render and redeploy. (${raw})`;
+  }
+  if (/sender|not.*valid.*from|unauthori[sz]ed sender/i.test(body || '')) {
+    return `Brevo refused the sender ${parseSender(from).email || ''}. In Brevo → Senders, Domains & Dedicated IPs → Senders, add and verify this address, or change EMAIL_FROM in Render to one that is verified. (${raw})`;
+  }
+  return raw;
 }
 
 export let lastEmailError = null;

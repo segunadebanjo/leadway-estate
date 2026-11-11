@@ -47,6 +47,14 @@ function EmailCard({ s, reload }) {
             <button className="btn" disabled={test.busy}>{test.busy ? 'Sending…' : 'Send a test email'}</button>
           </form>
           {sent && <div className="alert alert-good">Sent. Check the inbox (and the spam folder) of {to}.</div>}
+          <details style={{ marginTop: '.75rem' }}>
+            <summary>Change the sending address or fix a key error</summary>
+            <ol className="steps">
+              <li>In Brevo (logged in as the account that owns the key) → <strong>Senders, Domains &amp; Dedicated IPs</strong> → <strong>Senders</strong> → <strong>Add a sender</strong>, enter the new address and click the link Brevo emails to it.</li>
+              <li>If the key error shows ("Key not found" / 401): Brevo → <strong>SMTP &amp; API</strong> → <strong>API Keys</strong> → <strong>Generate a new API key</strong>. Copy the whole key (it starts <code>xkeysib-</code>, not <code>xsmtpsib-</code>).</li>
+              <li>In <strong>dashboard.render.com</strong> → <strong>leadway-estate</strong> → <strong>Environment</strong>, set <code>EMAIL_FROM</code> = <code>Leadway Estate &lt;new address&gt;</code> and, if needed, paste the new key into <code>BREVO_API_KEY</code>. Click <strong>Save, rebuild, and deploy</strong>, then send a test email here.</li>
+            </ol>
+          </details>
         </>
       ) : (
         <>
