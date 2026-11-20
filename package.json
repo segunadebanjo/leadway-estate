@@ -3,6 +3,9 @@
   "version": "2.0.0",
   "private": true,
   "description": "Residential estate association management – Leadway Estate, Mowe, Ogun State",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "local": "node scripts/local.mjs",
     "install:all": "npm --prefix server install && npm --prefix client install",

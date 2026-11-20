@@ -21,8 +21,8 @@ export const config = {
   isProd,
   isTest,
   port: Number(env.PORT || 4000),
-  // On Render the public address is known automatically.
-  appUrl: (env.APP_URL || env.RENDER_EXTERNAL_URL || 'http://localhost:5173').replace(/\/$/, ''),
+  // On Render and Railway the public address is known automatically (APP_URL overrides).
+  appUrl: (env.APP_URL || env.RENDER_EXTERNAL_URL || (env.RAILWAY_PUBLIC_DOMAIN && `https://${env.RAILWAY_PUBLIC_DOMAIN}`) || 'http://localhost:5173').replace(/\/$/, ''),
   databaseUrl: required('DATABASE_URL'),
   jwtSecret,
   sessionHours: Number(env.SESSION_HOURS || 12),

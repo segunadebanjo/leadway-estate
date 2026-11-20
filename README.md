@@ -11,7 +11,7 @@ client/   React single-page app (admin dashboard, resident portal, security gate
 
 ## Online or on your own computer?
 
-**Want a link that everyone can open?** See [Put it online (free)](#put-it-online-free-your-own-web-address-in-about-15-minutes). **Just trying it out alone?** Run it on your computer (next section).
+**Want a link that everyone can open?** See [Put it online on Railway](#put-it-online-on-railway-recommended-about-us5-a-month). **Just trying it out alone?** Run it on your computer (next section).
 
 ## Easiest way: run it on your own computer
 
@@ -51,11 +51,11 @@ Uploading the same file twice adds nobody twice. **Expenses** has the same **Upl
 
 ## Setting up email
 
-Email (sign-in details, "Forgot password", receipts, reminders) needs an email service. Render's free plan blocks ordinary SMTP, so the app uses **Brevo** (free, 300 emails a day) over HTTPS:
+Email (sign-in details, "Forgot password", receipts, reminders) needs an email service. Some hosts (e.g. Render's free plan) block ordinary SMTP, so the app uses **Brevo** (free, 300 emails a day) over HTTPS:
 
 1. Sign up at brevo.com with the address the estate should send from.
 2. In Brevo: your name (top right) → **SMTP & API** → **API Keys** → **Generate a new API key**; copy it.
-3. In Render → leadway-estate → **Environment**, add `BREVO_API_KEY` (the key) and `EMAIL_FROM` = `Leadway Estate <the address you signed up with>`, then **Save, rebuild, and deploy**.
+3. In your host's settings (Railway → leadway-estate → **Variables**), add `BREVO_API_KEY` (the key) and `EMAIL_FROM` = `Leadway Estate <the address you signed up with>`. Railway redeploys by itself.
 4. In the app, **Settings → Send a test email**.
 
 On your own server any SMTP account works instead (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`).
@@ -172,7 +172,33 @@ Roles are re-read from the database on every request, so deactivation, role chan
 * Uploads are checked by magic bytes, stored under random names, and served as attachments with `nosniff`.
 * Helmet sets a CSP that allows only Paystack's script and checkout frames.
 
-## Put it online (free): your own web address in about 15 minutes
+## Put it online on Railway (recommended, about US$5 a month)
+
+Railway keeps the app awake all the time, so the nightly billing and the 9 am reminders always run.
+The settings are in `railway.json`, so Railway fills in the build, start, database migration and health
+check by itself. The database stays on Neon (Step 1 of the next section).
+
+1. Go to **railway.com**, sign up with **GitHub** and choose the **Hobby** plan.
+2. **New Project** → **Deploy from GitHub repo** → choose `leadway-estate`. If GitHub asks, allow Railway to see it.
+3. Open the service → **Variables** → **Raw Editor** and paste (one per line, your own values):
+   ```
+   NODE_ENV=production
+   DATABASE_URL=<the Neon connection string>
+   JWT_SECRET=<a random text of at least 32 characters>
+   SEED_ADMIN_EMAIL=<your email>
+   SEED_ADMIN_PASSWORD=<a temporary password>
+   ```
+   Moving from Render? Copy **every** variable from Render → Environment instead, including the same
+   `JWT_SECRET` (so nobody is signed out), `BREVO_API_KEY`, `EMAIL_FROM`, Paystack and Termii keys.
+4. **Settings** → **Networking** → **Generate Domain**. That is the app's address
+   (e.g. `https://leadway-estate-production.up.railway.app`). The app picks it up by itself; if you add
+   your own domain later, also set `APP_URL=https://your.domain`.
+5. Wait until the deployment says **Active**, open the address and sign in.
+6. If you use Paystack, set its webhook URL to `<your address>/api/payments/webhook`.
+
+Every change pushed to GitHub redeploys by itself. Your own domain: **Settings** → **Networking** → **Custom Domain**.
+
+## Put it online free on Render (sleeps when idle): your own web address in about 15 minutes
 
 When this is done, the app has a permanent link such as **https://leadway-estate.onrender.com**. You,
 the other executives and the residents open it on any phone or computer, each with their own sign-in,
